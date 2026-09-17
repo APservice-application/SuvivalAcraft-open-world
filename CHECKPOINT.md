@@ -229,3 +229,11 @@ Task: เพลงสังเคราะห์ (DISCOVERED)
 Status: DONE
 Evidence: web/src/music.ts (noteFreq A4=440, DAY/NIGHT_THEME, buildSequence pure, MusicEngine look-ahead scheduler + setTheme/toggleMute ปลอดภัยไร้ DOM) + main.ts (ปุ่ม 🎵, สลับธีมตามกลางวัน/กลางคืนอัตโนมัติ, เริ่มเมื่อ unlock เสียง); tests +4; suite 152/152 PASS; check + web typecheck + vite build PASS
 Commit: (commit ถัดจาก CP-018)
+
+## BUG-001
+Task: แก้หน้าสร้างตัวละครบนมือถือแนวนอน — ปุ่มเริ่มเกมหลุดจอเลื่อนไม่ได้ + แถว Seed พัง (input ถูกย่อ ปุ่ม🎲ยืดเต็มจอ)
+Status: DONE
+Root cause: (1) .screen เป็น flex กึ่งกลางแบบ overflow:hidden ทั้งหน้า เมื่อ card สูงกว่าจอ (มือถือแนวนอน ~360px) เนื้อหาปลายถูกตัดและเลื่อนไม่ได้ (2) .btn ใช้ width:100% ทำ flex-basis กลืนแถว .row จน input ย่อเหลือ 0
+Fix: .screen overflow-y:auto + touch-action:pan-y + card margin:auto; .row .field flex:1 min-width:0 และ .row .btn width:auto; เพิ่ม @media (max-height:500px, landscape) ย่อ padding/ฟอนต์/swatch ให้เห็นปุ่มเริ่มเกมโดยไม่ต้องเลื่อน
+Evidence: tsc web PASS; vite build PASS (fix อยู่ใน dist); suite 152/152 PASS
+Commit: (commit ถัดจาก BUG-001)
