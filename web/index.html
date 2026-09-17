@@ -99,8 +99,24 @@
           <button class="btn primary" id="btn-continue">Continue</button>
           <button class="btn" id="btn-new">New Game</button>
           <button class="btn" id="btn-load">🌍 โลกของฉัน</button>
+          <button class="btn" id="btn-coop">🎮 Co-op (หลายคน)</button>
           <button class="btn" id="btn-settings">Settings</button>
           <button class="btn" id="btn-credits">Credits</button>
+        </div>
+      </div>
+
+      <!-- Co-op -->
+      <div id="screen-coop" class="screen">
+        <div class="menu-card">
+          <h1 style="text-align:center;font-size:20px;margin:0 0 6px">🎮 เล่นหลายคน (Local Co-op)</h1>
+          <p style="text-align:center;color:#9fb0d8;font-size:12px;margin:0">เปิดห้องในแท็บนี้ แล้วเข้าร่วมจากอีกแท็บ</p>
+          <button class="btn primary" id="btn-coop-host">🏠 เปิดห้องใหม่ (เป็นโฮสต์)</button>
+          <label class="field-label">หรือเข้าร่วมด้วยรหัสห้อง</label>
+          <div class="row">
+            <input id="coop-code" class="field" placeholder="เช่น K7XQ" maxlength="4" style="text-transform:uppercase" />
+            <button class="btn" id="btn-coop-join" style="flex:0 0 auto;padding:12px 14px">เข้าร่วม</button>
+          </div>
+          <button class="btn" id="btn-coop-back">กลับ</button>
         </div>
       </div>
 

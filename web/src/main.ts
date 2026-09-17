@@ -15,6 +15,10 @@ import { applyContentPack, packFromStorage } from "./content.js";
 import { ENEMY_KINDS, enemyStats, rollEnemyKind, shouldSpawnBoss } from "./bestiary.js";
 import { QuestLog } from "./quests.js";
 import { Sfx } from "./audio.js";
+import {
+  HostSession, GuestSession, BroadcastChannelTransport,
+  makeRoomCode, makePlayerId, type MpPlayerState, type Transport, type MpAction,
+} from "./multiplayer.js";
 import { TouchJoystick, KeyboardInput, setupButton } from "./controls.js";
 
 // ---------- DOM ----------
@@ -52,6 +56,18 @@ let coldMsgAt = 0;
 let bannerEl: HTMLElement | null = null;
 let tradeEl: HTMLElement | null = null;
 let tradeOpen = false;
+
+// co-op (task 16) — host-authoritative
+let mpRoom: string | null = null;
+let mpTransport: Transport | null = null;
+let mpHost: HostSession | null = null;
+let mpGuest: GuestSession | null = null;
+let mpIntentTimer = 0;
+let mpMyId = "";
+let mpMyName = "";
+let mpMyColor = "#7ce0a0";
+let mpLastIntentDir = { dx: 0, dz: 0 };
+let coopEl: HTMLElement | null = null;
 
 let camX = 0, camY = 0;
 let running = false;
@@ -124,6 +140,11 @@ function buildDynamicUI(): void {
   bannerEl = document.createElement("div");
   bannerEl.style.cssText = "position:absolute;top:calc(max(8px,env(safe-area-inset-top)) + 84px);left:50%;transform:translateX(-50%);background:rgba(10,16,30,.85);border:1px solid rgba(255,213,79,.4);color:#ffd54f;font-size:12px;padding:4px 10px;border-radius:8px;z-index:6;display:none;pointer-events:none;";
   hud.appendChild(bannerEl);
+
+  // co-op panel
+  coopEl = document.createElement("div");
+  coopEl.style.cssText = "position:absolute;left:12px;bottom:110px;width:210px;max-height:40%;overflow:auto;background:rgba(10,16,30,.94);border:1px solid rgba(143,176,255,.35);border-radius:12px;padding:10px;z-index:7;display:none;font-size:12px;color:#ecf0ff;";
+  hud.appendChild(coopEl);
 
   // trade panel (merchant)
   tradeEl = document.createElement("div");
@@ -554,6 +575,20 @@ function render(): void {
     const ps = worldToScreen(pk.x, pk.z);
     ctx.font = "10px monospace";
     ctx.fillText(pk.item === "gold" ? "🪙" : (ITEMS[pk.item]?.icon ?? "📦"), ps.sx + 3, ps.sy + 12);
+  }
+
+  // co-op ghosts
+  for (const gp of mpOthers()) {
+    const gs = worldToScreen(gp.x, gp.z);
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = gp.color || "#7ce0a0";
+    ctx.fillRect(gs.sx + 3, gs.sy + 3, 10, 12);
+    ctx.fillStyle = "#e8b57a";
+    ctx.fillRect(gs.sx + 6, gs.sy, 4, 4);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "#fff";
+    ctx.font = "8px monospace";
+    ctx.fillText(gp.name.slice(0, 10), gs.sx - 4, gs.sy - 4);
   }
 
   // player
@@ -1205,6 +1240,115 @@ function closePause(): void {
 }
 
 // ============================================================
+//  CO-OP (task 16) — host-authoritative local multiplayer
+// ============================================================
+function myMpState(): MpPlayerState {
+  return { id: mpMyId, name: mpMyName, color: mpMyColor, x: player.pos.x, z: player.pos.y, hp: player.hp, level: player.level };
+}
+
+function renderCoop(): void {
+  if (!coopEl) return;
+  if (!mpRoom) { coopEl.style.display = "none"; return; }
+  coopEl.style.display = "block";
+  if (mpHost) {
+    const list = mpHost.playerList().map((p) => `<div>${p.color === player.outfit ? "🟢" : "👤"} ${escapeHtml(p.name)} · Lv${p.level}</div>`).join("");
+    coopEl.innerHTML = `<div style="font-weight:700;color:#8fb0ff">🎮 ห้อง ${mpRoom} (โฮสต์)</div>${list}<div style="color:#7f8db0;margin-top:4px">เปิดแท็บใหม่ → เข้าร่วม ด้วยรหัสนี้</div>`;
+  } else if (mpGuest) {
+    const list = mpGuest.others().map((p) => `<div>👤 ${escapeHtml(p.name)} · Lv${p.level}</div>`).join("");
+    coopEl.innerHTML = `<div style="font-weight:700;color:#8fb0ff">🎮 ห้อง ${mpRoom}${mpGuest.joined ? "" : " (กำลังเชื่อม...)"}</div>${list}`;
+  }
+}
+
+async function startHosting(): Promise<void> {
+  if (!player) await beginNewGame();
+  stopCoop();
+  mpRoom = makeRoomCode();
+  mpMyId = makePlayerId();
+  mpMyName = player.name;
+  mpMyColor = player.outfit;
+  try {
+    mpTransport = new BroadcastChannelTransport(mpRoom);
+  } catch {
+    mpTransport = null;
+    notify("อุปกรณ์/เบราว์เซอร์นี้ไม่รองรับ co-op", "#ff8a80");
+    return;
+  }
+  mpHost = new HostSession(mpRoom, mpMyId, myMpState(), mpTransport);
+  if (coopEl) coopEl.style.display = "block";
+  notify(`🎮 เปิดห้อง ${mpRoom} — เข้าร่วมจากแท็บอื่นได้`, "#aaf0c2");
+  renderCoop();
+}
+
+async function joinRoom(roomInput: string): Promise<void> {
+  const room = roomInput.trim().toUpperCase();
+  if (room.length < 3) { notify("ใส่รหัสห้องให้ถูกต้อง", "#ff8a80"); return; }
+  if (!player) await beginNewGame();
+  stopCoop();
+  mpRoom = room;
+  mpMyId = makePlayerId();
+  mpMyName = player.name;
+  mpMyColor = player.outfit;
+  try {
+    mpTransport = new BroadcastChannelTransport(room);
+  } catch {
+    mpTransport = null;
+    notify("ไม่รองรับ co-op", "#ff8a80");
+    return;
+  }
+  mpGuest = new GuestSession(room, mpMyId, player.name, player.outfit, mpTransport);
+  mpGuest.join();
+  if (coopEl) coopEl.style.display = "block";
+  notify(`กำลังเข้าร่วมห้อง ${room}...`, "#ffd54f");
+  renderCoop();
+}
+
+function stopCoop(): void {
+  mpHost?.close();
+  mpGuest?.close();
+  mpTransport = null;
+  mpHost = null;
+  mpGuest = null;
+  mpRoom = null;
+  renderCoop();
+}
+
+/** ส่ง move intent ของ guest ไป host (10Hz) */
+function mpSendIntents(dt: number): void {
+  if (!mpGuest || !mpGuest.joined) return;
+  const joy = joystick.read();
+  const kb = keyboard.read();
+  const dx = joy.dx || kb.dx;
+  const dz = joy.dy || kb.dy;
+  const moving = (joy.magnitude || kb.magnitude) > 0;
+  const dir = moving ? { dx, dz } : { dx: 0, dz: 0 };
+  const changed = dir.dx !== mpLastIntentDir.dx || dir.dz !== mpLastIntentDir.dz;
+  mpIntentTimer += dt;
+  if (mpIntentTimer >= 0.1 && (changed || moving)) {
+    mpIntentTimer = 0;
+    mpLastIntentDir = dir;
+    const action: MpAction = moving ? { t: "move", dx: dir.dx, dz: dir.dz } : { t: "stop" };
+    mpGuest.sendAction(action);
+  }
+}
+
+/** รายชื่อผู้เล่นคนอื่นที่ต้องวาด ghost (host: จาก session, guest: จาก snapshot) */
+function mpOthers(): MpPlayerState[] {
+  if (mpHost) {
+    return mpHost.playerList().filter((p) => p.id !== mpMyId);
+  }
+  if (mpGuest) {
+    // reconcile ตำแหน่งตัวเองกับ host ถ้าห่างเกิน 2 tiles
+    const mine = mpGuest.myAuthoritative();
+    if (mine && (Math.abs(mine.x - player.pos.x) > 2 || Math.abs(mine.z - player.pos.y) > 2)) {
+      player.pos.x = mine.x;
+      player.pos.y = mine.z;
+    }
+    return mpGuest.others();
+  }
+  return [];
+}
+
+// ============================================================
 //  GAME UPDATE
 // ============================================================
 function update(dt: number): void {
@@ -1281,6 +1425,16 @@ function update(dt: number): void {
   // combat
   updateEnemies(dt);
 
+  // co-op sync
+  if (mpHost) {
+    mpHost.updateSelf(player.pos.x, player.pos.y, player.hp, player.level);
+    mpHost.tick(dt);
+    if (Math.random() < 0.02) renderCoop();
+  } else if (mpGuest) {
+    mpSendIntents(dt);
+    if (Math.random() < 0.02) renderCoop();
+  }
+
   // context: show interact button if gatherable tile OR facing building/door/crop
   const px = Math.round(player.pos.x), pz = Math.round(player.pos.y);
   const gatherable = world.gather(px, pz) !== null;
@@ -1325,6 +1479,7 @@ function loop(ts: number): void {
 //  MENU WIRING
 // ============================================================
 function goMainMenu(): void {
+  stopCoop();
   void saveNow("auto");
   running = false;
   paused = false;
@@ -1405,6 +1560,17 @@ async function init(): Promise<void> {
   });
   $("btn-settings").addEventListener("click", () => notify("ตั้งค่าอยู่ระหว่างพัฒนา", "#ffd54f"));
   $("btn-credits").addEventListener("click", () => notify("🧭 SuvivalCraft — ส่วนหนึ่งของ SuvivalAcraft", "#9fb0d8"));
+
+  // co-op screen
+  $("btn-coop").addEventListener("click", () => { showScreen("screen-coop"); });
+  $("btn-coop-host").addEventListener("click", () => {
+    void startHosting().then(() => { if (mpRoom) showScreen("none"); });
+  });
+  $("btn-coop-join").addEventListener("click", () => {
+    const code = $<HTMLInputElement>("coop-code").value;
+    void joinRoom(code).then(() => { if (mpRoom) showScreen("none"); });
+  });
+  $("btn-coop-back").addEventListener("click", () => { showScreen("screen-menu"); });
 
   // worlds screen
   $("btn-worlds-new").addEventListener("click", () => {

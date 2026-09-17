@@ -79,7 +79,7 @@ Status: IN_PROGRESS (claimed 2026-09-17 รอบ 2) — ทำเป็น CP-0
 
 # LAST COMPLETED
 
-CP-012 Quest chain + explore/talk/boss + Audio SFX (ก่อนหน้า: CP-011 Farming v2)
+CP-013 Co-op Local Multiplayer (16) — host-authoritative (ก่อนหน้า: CP-012 Quest chain+Audio)
 
 ---
 
@@ -184,3 +184,9 @@ Task: Quest system ขยาย (chain + explore/talk/boss) + Audio
 Status: DONE
 Evidence: web/src/quests.ts (QUEST_DEFS 7 อันเป็นสาย after-chain, QuestLog progress/done/unlock/reward) + web/src/audio.ts (SFX สังเคราะห์ 11 เสียง, unlock on gesture) + main.ts (quest chain UI + locked count, explore นับโซน 8x8, craft/talk/boss hooks, sfx ครบทุก event, levelup notify, save/load quests+zones); tests/web-quests.test.ts (9 tests); suite 129/129 PASS; check PASS; web typecheck PASS; vite build PASS
 Commit: (commit ถัดจาก CP-012)
+
+## CP-013
+Task: 16 LAN/Local Multiplayer (host-authoritative)
+Status: DONE (scope: local co-op ข้ามแท็บผ่าน BroadcastChannel; Transport เป็น interface — ต่อ WebRTC/WebSocket ข้ามเครื่องได้ภายหลังโดยไม่แก้ protocol)
+Evidence: web/src/multiplayer.ts (protocol join/welcome/action/snapshot/leave + HostSession ตรวจ intent + rate-limit 12/s + chained action log cap 200 + integrate เดินด้วย MP_SPEED + GuestSession reconcile > 2 tiles + makeRoomCode + Loopback/BroadcastChannel Transport) + main.ts (หน้า Co-op เปิดห้อง/เข้าร่วม, ghost players พร้อมชื่อ, ส่ง move intent 10Hz, พาเนลสถานะห้อง) + index.html (screen-coop); tests/web-multiplayer.test.ts (8 tests); suite 141/141 PASS; check PASS; web typecheck PASS; vite build PASS
+Commit: (commit ถัดจาก CP-013)
