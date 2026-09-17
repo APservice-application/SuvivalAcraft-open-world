@@ -62,6 +62,12 @@ const doc = window.document;
 function fire(el, type) {
   el.dispatchEvent(new window.MouseEvent(type, { bubbles: true, cancelable: true }));
 }
+// setupButton ฟัง touchstart (jsdom ไม่มี TouchEvent → ยิง Event ธรรมดา)
+function fireTouch(el) {
+  if (!el) return;
+  el.dispatchEvent(new window.Event("touchstart", { bubbles: true, cancelable: true }));
+  el.dispatchEvent(new window.Event("touchend", { bubbles: true, cancelable: true }));
+}
 
 await new Promise((r) => setTimeout(r, 300)); // ให้ init เสร็จ (pickStore ฯลฯ)
 
@@ -88,13 +94,38 @@ for (const e of errors.slice(0, 5)) console.log("  ERR:", e.split("\n").slice(0,
 console.log("console.error:", consoleErrors.length);
 for (const e of consoleErrors.slice(0, 3)) console.log("  CE:", String(e).split("\n").slice(0, 4).join("\n  "));
 
-// ไล่เวลาอีกหน่อยให้ spawn/event/อุณหภูมิทำงาน + จำลองเดินหน้า
+// --- CP-020 NPC: spawn เลยใกล้ผู้เฒ่า → กดโต้ตอบ → ของขวัญ → ปิด ---
 const key = (type, k) => window.dispatchEvent(new window.KeyboardEvent(type, { key: k, bubbles: true }));
+let npcOk = false;
+fireTouch(doc.getElementById("btn-interact"));
+await new Promise((r) => setTimeout(r, 80));
+{
+  const ov = doc.getElementById("panel-overlay");
+  const t = ov?.textContent ?? "";
+  npcOk = ov?.style.display === "block" && t.includes("บทสนทนา") && t.includes("ผู้เฒ่า");
+}
+console.log("");
+console.log("== NPC dialogue เปิดที่ spawn ==", npcOk);
+// กดของขวัญ (ตัวเลือกแรก) → gold 10 → 20
+let goldAfter = -1;
+if (npcOk) {
+  const giftBtn = doc.querySelector("[data-dopt='0']");
+  giftBtn?.click();
+  await new Promise((r) => setTimeout(r, 80));
+  const chips = doc.getElementById("panel-overlay")?.textContent ?? "";
+  goldAfter = chips.includes("🪙 20") ? 20 : -1;
+  console.log("gold หลังรับของขวัญ:", goldAfter);
+  doc.getElementById("panel-close")?.click();
+  await new Promise((r) => setTimeout(r, 80));
+}
+const npcPassed = npcOk && goldAfter === 20;
+
+// ไล่เวลาอีกหน่อยให้ spawn/event/อุณหภูมิทำงาน + จำลองเดินหน้า
 key("keydown", "w");
 await new Promise((r) => setTimeout(r, 1200));
 key("keyup", "w");
 // กดโจมตี (setupButton ฟัง touchstart/mousedown)
-fire(doc.getElementById("btn-attack"), "mousedown");
+fireTouch(doc.getElementById("btn-attack"));
 await new Promise((r) => setTimeout(r, 800));
 
 console.log("");
@@ -126,7 +157,8 @@ console.log("panel ปิดแล้ว:", overlay?.style.display === "none");
 const ok = errors.length === 0 && consoleErrors.length === 0
   && (quick?.children.length ?? 0) === 6
   && slots === 24
-  && overlay?.style.display === "none";
+  && overlay?.style.display === "none"
+  && npcPassed;
 console.log("");
 console.log(ok ? "SMOKE PASS ✅" : "SMOKE FAIL ❌");
 process.exit(ok ? 0 : 1);

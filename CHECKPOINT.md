@@ -250,4 +250,9 @@ Commit: (commit ถัดจาก BUG-002)
 Task: UI-007/008/009 Equipment slots + Panels (Inventory/Character/Quest) — ตาม UI_BLUEPRINT
 Status: DONE
 Evidence: state.ts (ItemDef.slot, PlayerState.armor+armorDur, equipArmorFromSlot/unequipArmor/wearArmor/migrateEquipSlots, equippedDefense รวมทุกช่อง, ไอเทม hide_helm/hide_pants/bone_charm/bone + สูตร 3 ใหม่) + main.ts (สวมเกราะจาก quickbar, เกราะอกสึกเมื่อโดนตี, migration เซฟเก่า equip=เกราะ→chest, เมนูซ้าย 🎒👤📜 + panel overlay: กระเป๋า 24 ช่องแตะ=ใช้/สวม/ทิ้ง/เรียง, หน้าตัวละคร bar 4 ค่า + ช่องสวม 5 แตะถอดได้, รายการเควสครบทุกสถานะ, คีย์ลัด I/C/Q/Esc) + index.html (panel CSS + จอเตี้ย); icons เพิ่ม 4 ชิ้น; tests/web-equipment.test.ts (9 tests) + แก้ test เดิม 2 จุด; suite 161/161 PASS; smoke PASS (panel เปิด 24 slot ปิดกลับ paused=false); check + web typecheck + vite build PASS
-Commit: (commit ถัดจาก CP-019)
+Commit: 7729bad
+## CP-020
+Task: P2.1-P2.2 NPC Village + Dialogue + Shop + Blacksmith repair — ตาม GAME_BLUEPRINT
+Status: DONE
+Evidence: web/src/npc.ts (NPC_DEFS elder/merchant/blacksmith รอบจัตุรัส spawn 35,35/37,35/35,37 + dialogue options + SHOP_STOCK 9 รายการ + SELLABLE 11 + applyBuy/applySell pure + repairCost/applyRepair คิดจาก inv dur + armorDur ทุกช่อง) + main.ts (วาด NPC บน canvas + บล็อกเดินทับ + 🤝 ขึ้นเมื่อใกล้ + interact เปิดบทสนทนา, renderShopBody ซื้อ/ขาย/ปุ่มกลับ, renderDialogBody greeting+options, gift 10🪙 ครั้งเดียว, sfx coin/denied ใหม่ใน audio.ts) + smoke (touchstart harness, คุยผู้เฒ่าที่ spawn → รับของขวัญ gold 10→20 → ปิด) + tests/web-npc.test.ts (7 tests); suite 168/168 PASS; check/tsc/build PASS
+Commit: (commit ถัดจาก CP-020)

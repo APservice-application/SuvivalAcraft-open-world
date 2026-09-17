@@ -15,6 +15,7 @@ import { sortSlots, wearSlot } from "./inventory.js";
 import { applyContentPack, packFromStorage } from "./content.js";
 import { ENEMY_KINDS, enemyStats, rollEnemyKind, shouldSpawnBoss } from "./bestiary.js";
 import { QuestLog, QUEST_DEFS } from "./quests.js";
+import { NPC_DEFS, npcById, applyBuy, applySell, applyRepair, repairCost, sellPrice, buyPrice, SHOP_STOCK, type NpcDef } from "./npc.js";
 import { Sfx } from "./audio.js";
 import { iconHTML, iconCanvas } from "./icons.js";
 import { MusicEngine, THEME_STEPS, themeLengthSec } from "./music.js";
@@ -75,7 +76,10 @@ let coopEl: HTMLElement | null = null;
 
 // panels (CP-019: Inventory/Character/Quest — UI-007/008/011)
 let panelEl: HTMLElement | null = null;
-let panelOpenKind: "inv" | "char" | "quest" | null = null;
+let panelOpenKind: "inv" | "char" | "quest" | "shop" | "dialog" | null = null;
+let activeNpc: NpcDef | null = null;
+let npcGifted = false;
+const village = NPC_DEFS.map((d) => ({ def: d, x: d.x, z: d.z }));
 let invSelected = -1;
 let questPanelEl: HTMLElement | null = null;
 
@@ -568,6 +572,22 @@ function render(): void {
     }
   }
 
+  // village NPCs (CP-020)
+  for (const n of village) {
+    const { sx, sy } = worldToScreen(n.x, n.z);
+    ctx.font = "12px monospace";
+    ctx.fillStyle = n.def.color;
+    ctx.fillRect(sx + 2, sy + 2, 12, 12);
+    ctx.fillStyle = "#14203a";
+    ctx.fillRect(sx + 4, sy + 5, 2, 2);
+    ctx.fillRect(sx + 10, sy + 5, 2, 2);
+    ctx.fillStyle = "#fff";
+    ctx.font = "8px monospace";
+    ctx.fillText(n.def.name.slice(0, 8), sx - 8, sy - 2);
+    ctx.font = "10px monospace";
+    ctx.fillText("💬", sx + 3, sy + 13);
+  }
+
   // enemies
   for (const e of enemies) {
     const { sx, sy } = worldToScreen(e.x, e.y);
@@ -858,6 +878,15 @@ function facingTile(): { x: number; z: number } {
 function interact(): void {
   const px = Math.round(player.pos.x), pz = Math.round(player.pos.y);
   const ft = facingTile();
+
+  // 0a) village NPC (CP-020): facing tile หรือยืนชิด
+  const nearNpc = village.find((n) =>
+    (n.x === ft.x && n.z === ft.z) ||
+    Math.hypot(n.x + 0.5 - (px + 0.5), n.z + 0.5 - (pz + 0.5)) < 1.6);
+  if (nearNpc) {
+    openDialog(nearNpc.def);
+    return;
+  }
 
   // 0) merchant: trade
   if (merchant && ft.x === merchant.x && ft.z === merchant.z) {
@@ -1342,7 +1371,7 @@ function closePause(): void {
 // ============================================================
 //  PANELS (CP-019) — Inventory / Character / Quest
 // ============================================================
-function openPanel(kind: "inv" | "char" | "quest"): void {
+function openPanel(kind: "inv" | "char" | "quest" | "shop" | "dialog"): void {
   if (!player) return;
   panelOpenKind = kind;
   invSelected = -1;
@@ -1350,6 +1379,86 @@ function openPanel(kind: "inv" | "char" | "quest"): void {
   paused = true;
   renderPanel();
   sfx.play("click");
+}
+
+/** เปิดบทสนทนากับ NPC (CP-020) */
+function openDialog(def: NpcDef): void {
+  activeNpc = def;
+  openPanel("dialog");
+}
+
+/** ดำเนินการตามตัวเลือกบทสนทนา */
+function dialogOption(idx: number): void {
+  if (!activeNpc || !player) return;
+  const opt = activeNpc.options[idx];
+  if (!opt) return;
+  if (opt.action === "close") {
+    closePanel();
+    return;
+  }
+  if (opt.action === "shop") {
+    panelOpenKind = "shop";
+    renderPanel();
+    sfx.play("click");
+    return;
+  }
+  if (opt.action === "gift") {
+    if (npcGifted) {
+      activeNpc = { ...activeNpc, greeting: "ข้าให้เจ้าไปแล้วนี่ อย่ามาขออีกนักเลย" };
+    } else {
+      player.gold += 10;
+      npcGifted = true;
+      notify("🎁 ได้รับของขวัญ 10 🪙", "#ffd54f");
+      sfx.play("quest");
+    }
+  }
+  if (opt.reply) activeNpc = { ...activeNpc, greeting: opt.reply };
+  renderPanel();
+}
+
+/** ซื้อของจากร้าน */
+function shopBuy(item: string): void {
+  if (!player) return;
+  const r = applyBuy(player, item);
+  if (!r.ok) {
+    notify("🛒 " + (r.reason ?? "ซื้อไม่ได้"), "#e05353");
+    sfx.play("denied");
+    return;
+  }
+  player = r.player;
+  notify(`🛒 ซื้อ ${ITEMS[item]?.icon} ${ITEMS[item]?.name} -${buyPrice(item)} 🪙`, "#ffd54f");
+  sfx.play("coin");
+  renderPanel(); renderQuickBar(); renderHud();
+}
+
+/** ขายของให้ร้าน */
+function shopSell(item: string): void {
+  if (!player) return;
+  const r = applySell(player, item);
+  if (!r.ok) {
+    notify("💰 " + (r.reason ?? "ขายไม่ได้"), "#e05353");
+    sfx.play("denied");
+    return;
+  }
+  player = r.player;
+  notify(`💰 ขาย ${ITEMS[item]?.icon} ${ITEMS[item]?.name} +${r.gain} 🪙`, "#7ce07c");
+  sfx.play("coin");
+  renderPanel(); renderQuickBar(); renderHud();
+}
+
+/** ส่งซ่อมอุปกรณ์ทั้งหมดที่ช่างตีเหล็ก */
+function shopRepair(): void {
+  if (!player) return;
+  const r = applyRepair(player);
+  if (!r.ok) {
+    notify("🔧 " + (r.reason ?? "ซ่อมไม่ได้"), "#e05353");
+    sfx.play("denied");
+    return;
+  }
+  player = r.player;
+  notify(`🔧 ซ่อมครบทุกชิ้น -${r.cost} 🪙`, "#7ce07c");
+  sfx.play("coin");
+  renderPanel(); renderQuickBar(); renderHud();
 }
 
 function closePanel(): void {
@@ -1369,16 +1478,19 @@ function durBar(dur: number | undefined, max: number | undefined): string {
 
 function renderPanel(): void {
   if (!panelEl || !player || !panelOpenKind) return;
-  const titles = { inv: "🎒 กระเป๋า", char: "👤 ตัวละคร", quest: "📜 ภารกิจ" } as const;
+  const titles = { inv: "🎒 กระเป๋า", char: "👤 ตัวละคร", quest: "📜 ภารกิจ", shop: "🛒 ร้านค้า", dialog: "💬 บทสนทนา" } as const;
   let body = "";
   if (panelOpenKind === "inv") body = renderInvBody();
   else if (panelOpenKind === "char") body = renderCharBody();
-  else body = renderQuestBody();
+  else if (panelOpenKind === "quest") body = renderQuestBody();
+  else if (panelOpenKind === "shop") body = renderShopBody();
+  else body = renderDialogBody();
   panelEl.innerHTML = `
     <div class="panel-card">
       <div class="panel-head">
         <b>${titles[panelOpenKind]}</b>
         <span class="panel-chips">🪙 ${player.gold}</span>
+        ${panelOpenKind === "shop" ? '<button id="shop-back">↩</button>' : ""}
         <button id="panel-close" style="margin-left:auto">✕</button>
       </div>
       <div class="panel-body">${body}</div>
@@ -1468,6 +1580,41 @@ function renderQuestBody(): string {
   return html;
 }
 
+function renderShopBody(): string {
+  if (!player) return "";
+  const buyRows = SHOP_STOCK.map((s) => {
+    const def = ITEMS[s.item]!;
+    const afford = player!.gold >= s.price;
+    return `<div class="qrow"><span class="qic">${iconHTML(s.item)}</span><span class="qname">${def.icon} ${def.name}</span><span class="qmeta"></span><button class="pbtn" data-buy="${s.item}" ${afford ? "" : "disabled"}>${s.price} 🪙</button></div>`;
+  }).join("");
+  const sellRows = (["wood", "stone", "fiber", "berry", "wheat", "corn", "hide", "bone", "meat_raw"] as const)
+    .filter((id) => countItems(player, id) > 0)
+    .map((id) => {
+      const def = ITEMS[id]!;
+      return `<div class="qrow"><span class="qic">${iconHTML(id)}</span><span class="qname">${def.icon} ${def.name} ×${countItems(player, id)}</span><button class="pbtn" data-sell="${id}">ขาย ${sellPrice(id)} 🪙</button></div>`;
+    }).join("");
+  return `
+    <div style="font-size:11px;color:#8fa3c8;margin-bottom:4px">— ซื้อ —</div>
+    ${buyRows}
+    <div style="font-size:11px;color:#8fa3c8;margin:8px 0 4px">— ขาย —</div>
+    ${sellRows || '<div style="color:#5c6e93;font-size:11px">ไม่มีของให้ขาย</div>'}`;
+}
+
+function renderDialogBody(): string {
+  if (!activeNpc) return "";
+  const opts = activeNpc.options.map((o, i) => {
+    const disabled = o.once && o.action === "gift" && npcGifted;
+    return `<button class="pbtn" style="width:100%;text-align:left;margin-bottom:6px" data-dopt="${i}" ${disabled ? "disabled" : ""}>${o.label}</button>`;
+  }).join("");
+  return `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span style="font-size:28px">${activeNpc.icon}</span>
+      <b style="color:${activeNpc.color}">${activeNpc.name}</b>
+    </div>
+    <div style="background:#0e1830;border:1px solid #23345c;border-radius:8px;padding:8px;margin-bottom:10px;font-size:12px;line-height:1.5;color:#dbe6ff">${activeNpc.greeting}</div>
+    ${opts}`;
+}
+
 function wirePanelEvents(): void {
   if (!panelEl) return;
   panelEl.querySelectorAll<HTMLElement>(".inv-slot").forEach((el) => {
@@ -1498,6 +1645,17 @@ function wirePanelEvents(): void {
     player!.inv = sortSlots(player!.inv);
     invSelected = -1;
     renderPanel(); renderQuickBar();
+  });
+  panelEl.querySelectorAll<HTMLElement>("[data-buy]").forEach((el) =>
+    el.addEventListener("click", () => shopBuy(el.dataset.buy!)));
+  panelEl.querySelectorAll<HTMLElement>("[data-sell]").forEach((el) =>
+    el.addEventListener("click", () => shopSell(el.dataset.sell!)));
+  panelEl.querySelectorAll<HTMLElement>("[data-dopt]").forEach((el) =>
+    el.addEventListener("click", () => dialogOption(Number(el.dataset.dopt))));
+  const backBtn = document.getElementById("shop-back");
+  if (backBtn) backBtn.addEventListener("click", () => {
+    panelOpenKind = "dialog";
+    renderPanel();
   });
   panelEl.querySelectorAll<HTMLElement>(".eq-box").forEach((el) => {
     el.addEventListener("click", () => {
@@ -1661,8 +1819,9 @@ function update(dt: number): void {
     else { faceX = 0; faceZ = dy > 0 ? 1 : -1; }
     const nx = player.pos.x + dx * speed * dt;
     const ny = player.pos.y + dy * speed * dt;
-    if (world.isWalkable(Math.round(nx), Math.round(player.pos.y))) player.pos.x = nx;
-    if (world.isWalkable(Math.round(player.pos.x), Math.round(ny))) player.pos.y = ny;
+    const npcAt = (tx: number, tz: number) => village.some((n) => n.x === tx && n.z === tz);
+    if (world.isWalkable(Math.round(nx), Math.round(player.pos.y)) && !npcAt(Math.round(nx), Math.round(player.pos.y))) player.pos.x = nx;
+    if (world.isWalkable(Math.round(player.pos.x), Math.round(ny)) && !npcAt(Math.round(player.pos.x), Math.round(ny))) player.pos.y = ny;
   }
 
   // camera follow
@@ -1749,7 +1908,8 @@ function update(dt: number): void {
   const ft = facingTile();
   const ftTile = world.tileAt(ft.x, ft.z);
   const cropTile = ftTile === T_CROP_0 || ftTile === T_CROP_1 || ftTile === T_CROP_2;
-  const facingInteractive = itemForBuildingTile(ftTile) !== undefined || isDoorTile(ftTile) || cropTile;
+  const nearNpcAny = village.some((n) => Math.hypot(n.x - px, n.z - pz) < 1.6);
+  const facingInteractive = itemForBuildingTile(ftTile) !== undefined || isDoorTile(ftTile) || cropTile || nearNpcAny;
   $("btn-interact").style.display = (gatherable || facingInteractive) ? "" : "none";
   // use button follows selection, label reflects action
   const useEl = $("btn-use");

@@ -1,7 +1,7 @@
 // Audio (web) — SFX สังเคราะห์ด้วย WebAudio ไม่ต้องมีไฟล์เสียง (งาน Audio)
 export type SfxName =
   | "attack" | "kill" | "craft" | "place" | "eat" | "harvest"
-  | "levelup" | "hurt" | "quest" | "pickup" | "click";
+  | "levelup" | "hurt" | "quest" | "pickup" | "click" | "coin" | "denied";
 
 export interface SfxProfile {
   freq: number;
@@ -23,6 +23,8 @@ export const SFX_PROFILES: Record<SfxName, SfxProfile> = {
   quest: { freq: 660, endFreq: 990, dur: 0.25, type: "sine", gain: 0.07 },
   pickup: { freq: 700, endFreq: 900, dur: 0.08, type: "sine", gain: 0.05 },
   click: { freq: 500, dur: 0.04, type: "square", gain: 0.03 },
+  coin: { freq: 880, endFreq: 1320, dur: 0.09, type: "square", gain: 0.05 },
+  denied: { freq: 220, endFreq: 160, dur: 0.12, type: "sawtooth", gain: 0.06 },
 };
 
 /** Minimal structural AudioContext (typecheck ผ่านทั้ง node/web) */
