@@ -79,7 +79,7 @@ Status: IN_PROGRESS (claimed 2026-09-17 รอบ 2) — ทำเป็น CP-0
 
 # LAST COMPLETED
 
-CP-011 Farming ขยาย: ปุ๋ยเร่งโต + ข้าวโพด + save format v2 plots (ก่อนหน้า: CP-010 Content Pack)
+CP-012 Quest chain + explore/talk/boss + Audio SFX (ก่อนหน้า: CP-011 Farming v2)
 
 ---
 
@@ -178,3 +178,9 @@ Task: Farming ขยาย (ปุ๋ย/แปลง, crop variety)
 Status: DONE
 Evidence: web/src/farming.ts v2 (CROPS wheat/corn คนละ timing+yield, cropStage crop-aware, FERT_MULT=1.6, fertilize ครั้งเดียว/แปลง, normalizePlot migration จาก number, loadFrom รับ mixed payload) + state.ts (corn_seed/corn/fertilizer + สูตรปุ๋ย) + saves.ts (crops type PlotSave) + main.ts (plantSeed เลือกตามเมล็ดที่ถือ, applyFertilizer, harvestCrop ตาม crop def, TRADES เพิ่ม corn_seed); tests/web-farming.test.ts rewrite + saves test update; suite 120/120 PASS; check PASS; web typecheck PASS; vite build PASS
 Commit: (commit ถัดจาก CP-011)
+
+## CP-012
+Task: Quest system ขยาย (chain + explore/talk/boss) + Audio
+Status: DONE
+Evidence: web/src/quests.ts (QUEST_DEFS 7 อันเป็นสาย after-chain, QuestLog progress/done/unlock/reward) + web/src/audio.ts (SFX สังเคราะห์ 11 เสียง, unlock on gesture) + main.ts (quest chain UI + locked count, explore นับโซน 8x8, craft/talk/boss hooks, sfx ครบทุก event, levelup notify, save/load quests+zones); tests/web-quests.test.ts (9 tests); suite 129/129 PASS; check PASS; web typecheck PASS; vite build PASS
+Commit: (commit ถัดจาก CP-012)

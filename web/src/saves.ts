@@ -24,6 +24,10 @@ export interface WorldSaveV2 {
   edits: [number, number, number][];
   /** farm plots: key "x,z" -> plot (crop + plantedAt + fert) */
   crops: Record<string, PlotSave>;
+  /** quest progress (CP-012 quest chain) */
+  quests?: { progress: Record<string, number>; done: Record<string, boolean> };
+  /** explored zone keys "zx,zz" (explore quest) */
+  zones?: string[];
   savedAt: number;
 }
 

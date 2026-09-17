@@ -13,6 +13,8 @@ import { ambientTemperature, warmthStep } from "./climate.js";
 import { sortSlots, wearSlot } from "./inventory.js";
 import { applyContentPack, packFromStorage } from "./content.js";
 import { ENEMY_KINDS, enemyStats, rollEnemyKind, shouldSpawnBoss } from "./bestiary.js";
+import { QuestLog } from "./quests.js";
+import { Sfx } from "./audio.js";
 import { TouchJoystick, KeyboardInput, setupButton } from "./controls.js";
 
 // ---------- DOM ----------
@@ -72,13 +74,11 @@ let spawnTimer = 0;
 let minimapCv: HTMLCanvasElement | null = null;
 let minimapCtx: CanvasRenderingContext2D | null = null;
 
-// ---------- Quest tracker ----------
-interface Quest { id: string; name: string; desc: string; target: number; progress: number; done: boolean; }
-let quests: Quest[] = [
-  { id: "gather_wood", name: "เก็บไม้", desc: "เก็บไม้ 5", target: 5, progress: 0, done: false },
-  { id: "kill_slime", name: "ปราบศัตรู", desc: "กำจัดศัตรู 2", target: 2, progress: 0, done: false },
-  { id: "harvest_crop", name: "เก็บเกี่ยว", desc: "เก็บพืชผล 2 ครั้ง", target: 2, progress: 0, done: false },
-];
+// ---------- Quest tracker (chain) + audio + explore ----------
+let questLog = new QuestLog();
+let visitedZones = new Set<string>();
+let lastLevel = 0;
+const sfx = new Sfx();
 let questEl: HTMLElement | null = null;
 
 // ---------- Crafting ----------
@@ -164,6 +164,8 @@ function renderCraft(): void {
       const r = RECIPES.find((x) => x.id === b.dataset.craft);
       if (r && craftRecipe(r, player)) {
         notify(`CRAFTED: ${r.icon} ${r.name}`, "#aaf0c2");
+        sfx.play("craft");
+        questProgress("craft_tool", 1);
         renderHud();
         renderCraft();
       } else {
@@ -175,19 +177,25 @@ function renderCraft(): void {
 
 function renderQuests(): void {
   if (!questEl) return;
-  const active = quests.filter((q) => !q.done);
-  if (active.length === 0) {
+  const active = questLog.active();
+  const locked = questLog.lockedCount();
+  if (!active.length && !locked) {
     questEl.innerHTML = "<div style='color:#fff;font-size:13px;background:rgba(10,16,30,.7);border-radius:8px;padding:4px 8px'>✅ ภารกิจสำเร็จทั้งหมด</div>";
     return;
   }
-  questEl.innerHTML = active.map((q) => {
-    const pct = Math.min(100, Math.round((q.progress / q.target) * 100));
+  let html = active.map((q) => {
+    const prog = questLog.progress[q.id] ?? 0;
+    const pct = Math.min(100, Math.round((prog / q.target) * 100));
     return `<div style="background:rgba(10,16,30,.72);border-radius:8px;padding:5px 9px;font-size:12px;color:#ecf0ff;border:1px solid rgba(255,255,255,.12)">
-      <div><b>${q.name}</b></div>
-      <div style="color:#9fb0d8;font-size:11px">${q.desc} <span style="color:#aaf0c2">${q.progress}/${q.target}</span></div>
+      <div><b>${q.icon} ${q.name}</b></div>
+      <div style="color:#9fb0d8;font-size:11px">${q.desc} <span style="color:#aaf0c2">${prog}/${q.target}</span></div>
       <div style="height:4px;background:#14203a;border-radius:2px;margin-top:3px"><div style="height:100%;width:${pct}%;background:#8fb0ff"></div></div>
     </div>`;
   }).join("");
+  if (locked > 0) {
+    html += `<div style="background:rgba(10,16,30,.5);border-radius:8px;padding:4px 9px;font-size:11px;color:#7f8db0">🔒 ภารกิจล็อกอยู่ ${locked} รายการ</div>`;
+  }
+  questEl.innerHTML = html;
 }
 
 // ============================================================
@@ -233,6 +241,12 @@ function startGame(p: PlayerState, seed: number, t: number, restore?: WorldSaveV
   if (tradeEl) tradeEl.style.display = "none";
   if (restore) {
     if (player.warmth === undefined) player.warmth = 50;
+    questLog = new QuestLog();
+    if (restore.quests) {
+      questLog.progress = { ...restore.quests.progress };
+      questLog.done = { ...restore.quests.done };
+    }
+    visitedZones = new Set(restore.zones || []);
     currentWorld = restore.meta;
     dayCount = restore.dayCount || 1;
     gameSeconds = restore.gameSeconds || 0;
@@ -244,7 +258,10 @@ function startGame(p: PlayerState, seed: number, t: number, restore?: WorldSaveV
     dayCount = 1;
     gameSeconds = 0;
     farmPlots = new FarmPlots();
+    questLog = new QuestLog();
+    visitedZones = new Set();
   }
+  lastLevel = player.level;
   notify(`ยินดีต้อนรับ ${p.name} 🏕️`, "#aaf0c2");
   showScreen("none");
   showHud(true);
@@ -286,6 +303,8 @@ async function saveNow(kind: "auto" | "manual"): Promise<void> {
     player,
     edits: world.getEdits(),
     crops: { ...farmPlots.state } as { [k: string]: { crop: string; plantedAt: number; fert?: boolean } },
+    quests: { progress: { ...questLog.progress }, done: { ...questLog.done } },
+    zones: [...visitedZones],
     savedAt: Date.now(),
   };
   try {
@@ -651,6 +670,7 @@ function updateEnemies(dt: number): void {
       if (dist < 1.4) {
         if (performance.now() / 1000 > (e as any).atkTimer) {
           player.hp = Math.max(0, player.hp - damageAfterDefense(e.dmg, player));
+          sfx.play("hurt");
           wearEquipped(1);
           (e as any).atkTimer = performance.now() / 1000 + 1;
           notify(`${e.kind} โจมตีคุณ! -${e.dmg}`, "#ff8a80");
@@ -673,6 +693,7 @@ function attack(): void {
   const dmg = equippedDamage(player) + Math.floor(Math.random() * 2);
   if (best) {
     best.hp -= dmg;
+    sfx.play("attack");
     wearEquipped(1);
     notify(`โจมตี ${best.kind}! -${dmg}`, "#ffd54f");
     if (best.hp <= 0) {
@@ -693,6 +714,7 @@ function attack(): void {
         notify(`ได้รับ 🟫 หนังสัตว์ x${n}`, "#aaf0c2");
       }
       if (st.gold) { player.gold += st.gold; notify(`🪙 +${st.gold} gold`, "#ffd54f"); }
+      sfx.play("kill");
       renderHud();
       if (addXpLevelCheck()) return;
     }
@@ -771,13 +793,13 @@ function interact(): void {
 }
 
 function questProgress(id: string, amt: number): void {
-  const q = quests.find((x) => x.id === id && !x.done);
-  if (!q) return;
-  q.progress += amt;
-  if (q.progress >= q.target) {
-    q.done = true;
-    notify(`✅ ภารกิจสำเร็จ: ${q.name}! +50 XP`, "#aaf0c2");
-    addXp(player, 50);
+  const finished = questLog.progressQuest(id, amt);
+  if (finished) {
+    const goldTxt = finished.rewardGold ? ` +${finished.rewardGold} gold` : "";
+    notify(`✅ ภารกิจสำเร็จ: ${finished.icon} ${finished.name}! +${finished.rewardXp} XP${goldTxt}`, "#aaf0c2");
+    addXp(player, finished.rewardXp);
+    if (finished.rewardGold) player.gold += finished.rewardGold;
+    sfx.play("quest");
   }
   renderQuests();
   renderHud();
@@ -790,6 +812,7 @@ function quickUse(slotIdx: number): void {
   const def = ITEMS[s.item];
   if (def?.category === "food") {
     useItem(player, slotIdx);
+    sfx.play("eat");
     notify(`กิน ${def.icon} ${def.name}`, "#aaf0c2");
   } else if (def?.category === "tool" || def?.category === "weapon") {
     useItem(player, slotIdx);
@@ -815,6 +838,7 @@ function placeBuilding(itemId: string): boolean {
   if (occupiedTile(t)) { notify("วางไม่ได้: มีสิ่งกีดขวาง", "#ff8a80"); return false; }
   if (!removeItem(player, itemId, 1)) { notify("ของไม่พอ", "#ff8a80"); return false; }
   world.setEdit(ft.x, ft.z, def.tile);
+  sfx.play("place");
   notify(`วาง ${def.icon} ${def.name}`, "#aaf0c2");
   renderHud();
   return true;
@@ -964,6 +988,7 @@ function updateEvents(dt: number): void {
     if (pk.x !== px || pk.z !== pz) return true;
     if (pk.item === "gold") { player.gold += pk.count; notify(`🪙 +${pk.count} gold`, "#ffd54f"); }
     else { addItem(player, pk.item, pk.count); notify(`เก็บ ${ITEMS[pk.item]?.icon} ${ITEMS[pk.item]?.name} x${pk.count}`, "#aaf0c2"); }
+    sfx.play("pickup");
     renderHud();
     return false;
   });
@@ -1076,6 +1101,7 @@ function harvestCrop(x: number, z: number): void {
   if (Math.random() < crop.seedChance) addItem(player, crop.seed, 1);
   addXp(player, 5);
   questProgress("harvest_crop", 1);
+  sfx.play("harvest");
   notify(`${crop.icon} เก็บ${crop.name} x${cnt} +5 XP`, "#aaf0c2");
   renderHud();
 }
@@ -1118,6 +1144,13 @@ function renderQuickBar(): void {
 //  HUD UPDATE
 // ============================================================
 function renderHud(): void {
+  if (player.level > lastLevel) {
+    if (lastLevel > 0) {
+      sfx.play("levelup");
+      notify(`⭐ เลเวลอัป! Lv ${player.level}`, "#ffd54f");
+    }
+    lastLevel = player.level;
+  }
   $("hud-hp").textContent = `${Math.ceil(player.hp)}`;
   $("hud-hunger").textContent = `${Math.ceil(player.hunger)}`;
   const warmthEl = $("hud-warmth");
@@ -1195,6 +1228,13 @@ function update(dt: number): void {
   // camera follow
   camX += (player.pos.x - camX) * Math.min(1, 8 * dt);
   camY += (player.pos.y - camY) * Math.min(1, 8 * dt);
+
+  // explore quest: นับโซน 8x8 ที่เท้าถึงเป็นครั้งแรก
+  const zoneKey = `${Math.floor(player.pos.x / 8)},${Math.floor(player.pos.y / 8)}`;
+  if (!visitedZones.has(zoneKey)) {
+    visitedZones.add(zoneKey);
+    questProgress("explore", 1);
+  }
 
   // survival
   survivalTick(player, dt);
@@ -1345,6 +1385,12 @@ async function init(): Promise<void> {
   } catch { /* ignore pack errors */ }
 
   setupControls();
+
+  // audio unlock on first user gesture (autoplay policy)
+  const unlockAudio = () => sfx.unlock();
+  addEventListener("pointerdown", unlockAudio, { once: true });
+  addEventListener("touchstart", unlockAudio, { once: true });
+  addEventListener("keydown", unlockAudio, { once: true });
 
   // menu
   $("btn-continue").addEventListener("click", () => { void playLatestWorld(); });
