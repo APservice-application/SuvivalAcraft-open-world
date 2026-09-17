@@ -14,11 +14,13 @@
     "dev": "vite",
     "build:web": "tsc -p web/tsconfig.json && vite build",
     "preview": "vite preview --outDir dist-web",
-    "mp-server": "node server/mp-server.mjs"
+    "mp-server": "node server/mp-server.mjs",
+    "test:smoke": "node scripts/smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
     "@types/ws": "^8.18.1",
+    "jsdom": "^29.1.1",
     "tsx": "^4.19.1",
     "typescript": "5.9.3",
     "vite": "^5.4.21",

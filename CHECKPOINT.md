@@ -237,3 +237,11 @@ Root cause: (1) .screen เป็น flex กึ่งกลางแบบ over
 Fix: .screen overflow-y:auto + touch-action:pan-y + card margin:auto; .row .field flex:1 min-width:0 และ .row .btn width:auto; เพิ่ม @media (max-height:500px, landscape) ย่อ padding/ฟอนต์/swatch ให้เห็นปุ่มเริ่มเกมโดยไม่ต้องเลื่อน
 Evidence: fix ยืนยันใน source+dist (overflow-y:auto, touch-action:pan-y, @media max-height:500px, .row .field flex, ปุ่ม🎲 width:auto); vite build PASS; suite 152/152 PASS
 Commit: (commit นี้)
+
+## BUG-002
+Task: เข้าเกมได้แต่จอดำไม่ render อะไรเลย (รายงานจากการเล่นจริงบนมือถือ + ภาพ screenshot)
+Status: DONE
+Root cause: init() เรียก renderHud() ตอน player ยัง undefined (หลังเพิ่ม level-up check ที่อ่าน player.level ก่อนหน้าในฟังก์ชัน) → throw → requestAnimationFrame(loop) ไม่ถูกเรียก → เกมไม่ render ตลอดไป (แต่ปุ่ม/เมนูยังทำงานเพราะ listener ติดก่อนหน้า) — unit tests ไม่จับเพราะไม่เคย boot เกมจริง
+Fix: (1) renderHud guard !player (2) loop ครอบ try/catch — error รายเฟรม log ครั้งเดียวแล้วเล่นต่อ ไม่ตายทั้งเกม (3) เพิ่ม scripts/smoke.mjs (jsdom headless boot: เริ่มเกม→loop 2.5s→เดิน→โจมตี ต้องไม่มี error + quickbar 6 slot) เป็น npm run test:smoke + เข้า CI
+Evidence: smoke PASS ✅ (0 errors, quickbar 6, hud ปกติ); npm test 152/152; check PASS; web typecheck PASS; vite build PASS
+Commit: (commit ถัดจาก BUG-002)

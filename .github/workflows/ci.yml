@@ -31,6 +31,9 @@ jobs:
       - name: Tests
         run: npm test
 
+      - name: Smoke test (headless game boot)
+        run: npm run test:smoke
+
       - name: Content validation
         run: npm run content:validate
 

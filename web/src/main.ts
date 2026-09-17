@@ -1235,6 +1235,7 @@ function renderQuickBar(): void {
 //  HUD UPDATE
 // ============================================================
 function renderHud(): void {
+  if (!player) return; // ยังไม่เริ่มเกม (BUG-002: init เรียกก่อน startGame แล้ว crash)
   if (player.level > lastLevel) {
     if (lastLevel > 0) {
       sfx.play("levelup");
@@ -1553,17 +1554,28 @@ function loop(ts: number): void {
   if (window.innerHeight > window.innerWidth) return; // portrait -> rotate-screen shown by CSS
   const dt = Math.min(0.05, (ts - lastTs) / 1000);
   lastTs = ts;
-  update(dt);
-  render();
-  renderMinimap();
-  if (msgTimer > 0) {
-    msgTimer -= dt;
-    if (msgTimer <= 0) msgEl.textContent = "";
+  try {
+    update(dt);
+    render();
+    renderMinimap();
+    if (msgTimer > 0) {
+      msgTimer -= dt;
+      if (msgTimer <= 0) msgEl.textContent = "";
+    }
+    // level-up detection via HUD each frame (cheap enough)
+    renderHud();
+    renderQuickBar();
+  } catch (err) {
+    // BUG-002 lesson: error รายเฟรมห้ามฆ่า loop — log ครั้งเดียวแล้วเล่นต่อ
+    if (!loopErrShown) {
+      loopErrShown = true;
+      console.error("loop error", err);
+      notify("⚠️ เกิดข้อผิดพลาดในเกม (ดู console)", "#ff8a80");
+    }
   }
-  // level-up detection via HUD each frame (cheap enough)
-  renderHud();
-  renderQuickBar();
 }
+
+let loopErrShown = false;
 
 // ============================================================
 //  MENU WIRING
