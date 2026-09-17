@@ -12,8 +12,9 @@
       #game { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; background: #0b0f1a; display: block; }
 
       /* ---- SCREENS (main menu / char creation) ---- */
-      .screen { position: absolute; inset: 0; z-index: 10; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 20px; background: radial-gradient(circle at 50% 20%, #1a2740, #070b14 75%); }
+      .screen { position: absolute; inset: 0; z-index: 10; display: none; flex-direction: column; align-items: center; padding: 16px; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; background: radial-gradient(circle at 50% 20%, #1a2740, #070b14 75%); }
       .screen.visible { display: flex; }
+      .screen > .menu-card { margin: auto; }
       .menu-card { width: min(92vw, 420px); background: rgba(10,16,30,.94); border: 1px solid rgba(255,255,255,.14); border-radius: 22px; padding: 26px 24px; box-shadow: 0 24px 60px rgba(0,0,0,.5); }
       .logo { text-align: center; margin-bottom: 18px; }
       .logo h1 { font-size: 30px; margin: 0; letter-spacing: .5px; }
@@ -23,8 +24,9 @@
       .btn:active { transform: scale(.98); }
       .field { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #2a3b5f; background: #0d1526; color: #ecf0ff; font-size: 16px; margin: 6px 0; }
       label.field-label { display: block; font-size: 12px; color: #7f8db0; margin-top: 10px; }
-      .row { display: flex; gap: 8px; }
-      .row .btn { flex: 1; }
+      .row { display: flex; gap: 8px; align-items: stretch; }
+      .row .field { flex: 1 1 0; width: auto; min-width: 0; }
+      .row .btn { flex: 1 1 0; width: auto; white-space: nowrap; }
       .swatch-row { display: flex; gap: 8px; justify-content: center; margin: 8px 0; }
       .swatch { width: 40px; height: 40px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; }
       .swatch.sel { border-color: #fff; }
@@ -72,6 +74,23 @@
       #menu-btn { position: absolute; top: calc(max(8px,env(safe-area-inset-top)) + 4px); right: 10px; width: 40px; height: 40px; border-radius: 10px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,16,30,.8); color: #fff; font-size: 18px; z-index: 6; }
       #overlay { position: absolute; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.6); }
       #overlay.visible { display: flex; }
+
+      /* ---- จอเตี้ย (มือถือแนวนอน): ย่อ card ให้เห็นปุ่มเริ่มเกมโดยไม่ต้องเลื่อน ---- */
+      @media (max-height: 500px) and (orientation: landscape) {
+        .menu-card { padding: 12px 18px; border-radius: 14px; }
+        .menu-card h1 { font-size: 16px !important; margin: 0 0 6px !important; }
+        .logo { margin-bottom: 8px; }
+        .logo h1 { font-size: 20px; }
+        .logo p { font-size: 11px; margin: 2px 0 0; }
+        .btn { padding: 9px 12px; font-size: 14px; margin: 5px 0; border-radius: 10px; }
+        .field { padding: 8px 10px; font-size: 14px; margin: 3px 0; border-radius: 8px; }
+        label.field-label { font-size: 11px; margin-top: 5px; }
+        .swatch { width: 26px; height: 26px; border-width: 2px; }
+        .swatch-row { margin: 5px 0; gap: 6px; }
+        #worlds-list { max-height: 38vh; gap: 6px; margin: 8px 0; }
+        .world-row { padding: 7px 10px; }
+        .world-play, .world-del { padding: 7px 10px; font-size: 12px; }
+      }
 
       /* ---- LANDSCAPE LOCK ---- */
       #rotate-screen { position: fixed; inset: 0; z-index: 999; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: #0b0f1a; color: #ecf0ff; padding: 24px; }
@@ -149,7 +168,7 @@
           <label class="field-label">Seed</label>
           <div class="row">
             <input id="world-seed" class="field" value="1337" />
-            <button class="btn" id="btn-random-seed" style="flex:0 0 auto;padding:12px 14px">🎲</button>
+            <button class="btn" id="btn-random-seed" style="flex:0 0 auto;width:auto;padding:8px 14px">🎲</button>
           </div>
           <label class="field-label">สีเสื้อ</label>
           <div class="swatch-row" id="outfit-row">

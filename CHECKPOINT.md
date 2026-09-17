@@ -235,5 +235,5 @@ Task: แก้หน้าสร้างตัวละครบนมือ�
 Status: DONE
 Root cause: (1) .screen เป็น flex กึ่งกลางแบบ overflow:hidden ทั้งหน้า เมื่อ card สูงกว่าจอ (มือถือแนวนอน ~360px) เนื้อหาปลายถูกตัดและเลื่อนไม่ได้ (2) .btn ใช้ width:100% ทำ flex-basis กลืนแถว .row จน input ย่อเหลือ 0
 Fix: .screen overflow-y:auto + touch-action:pan-y + card margin:auto; .row .field flex:1 min-width:0 และ .row .btn width:auto; เพิ่ม @media (max-height:500px, landscape) ย่อ padding/ฟอนต์/swatch ให้เห็นปุ่มเริ่มเกมโดยไม่ต้องเลื่อน
-Evidence: tsc web PASS; vite build PASS (fix อยู่ใน dist); suite 152/152 PASS
-Commit: (commit ถัดจาก BUG-001)
+Evidence: fix ยืนยันใน source+dist (overflow-y:auto, touch-action:pan-y, @media max-height:500px, .row .field flex, ปุ่ม🎲 width:auto); vite build PASS; suite 152/152 PASS
+Commit: (commit นี้)
