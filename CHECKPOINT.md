@@ -40,7 +40,7 @@ Engine แยกออกจาก Renderer (game/ = logic Engine, web/ = Render
 
 # CURRENT WORK
 
-Task: (ว่าง — MASTER TASK LIST ครบ 17/17 แล้ว)
+Task: (ว่าง — MASTER TASK LIST 17/17 + FUTURE/DISCOVERED ครบแล้ว)
 Owner: -
 Status: AVAILABLE
 
@@ -79,13 +79,13 @@ Status: AVAILABLE
 
 # LAST COMPLETED
 
-CP-014 CI + ปิดงานเอกสาร (MASTER TASK LIST 17/17 DONE) (ก่อนหน้า: CP-013 Co-op)
+CP-018 Music (เพลงสังเคราะห์กลางวัน/กลางคืน) (ก่อนหน้า: CP-017 Pixel icons, CP-016 WS relay, CP-015 World sync)
 
 ---
 
 # NEXT ACTION
 
-(ไม่มีงานค้างใน MASTER TASK LIST) — งาน future (ตาม RULE 18 DISCOVERED): item icon ศิลป์จริง, WebRTC transport ข้ามเครื่อง, world-effect sync ใน co-op, ไฟล์เสียงเพลงจริง
+(ไม่มี) — ทุกงานใน MASTER TASK LIST และ FUTURE/DISCOVERED ทำครบแล้ว ณ CP-018. งานถัดไปรอคำสั่ง/ไอเดียใหม่
 
 ---
 
@@ -95,12 +95,12 @@ None
 
 ---
 
-# FUTURE / DISCOVERED (นอก scope ปัจจุบัน — ทำต่อได้เมื่อสั่ง)
+# FUTURE / DISCOVERED — เคลียร์ครบแล้ว (2026-09-17)
 
-- [ ] item icons ศิลป์จริง (ตอนนี้ใช้ emoji)
-- [ ] WebRTC/WebSocket transport สำหรับ co-op ข้ามเครื่อง (protocol พร้อม)
-- [ ] world-effect sync ใน co-op (ตอนนี้ตำแหน่ง/presence authoritative, เอฟเฟกต์โลกยัง local)
-- [ ] เพลง/ไฟล์เสียงจริง (ตอนนี้ SFX สังเคราะห์ WebAudio)
+- [x] item icons ศิลป์จริง — CP-017 (pixel art 16x16 data-driven painters + fallback emoji)
+- [x] WebSocket transport ข้ามเครื่อง — CP-016 (relay server + integration tests; WebRTC เป็นทางเลือกเพิ่มภายหลังได้)
+- [x] world-effect sync ใน co-op — CP-015 (enemies/pickups/event/merchant broadcast)
+- [x] เพลง — CP-018 (ลูปสังเคราะห์ WebAudio สลับธีมกลางวัน/กลางคืน + ปุ่ม 🎵)
 
 ---
 
@@ -217,3 +217,15 @@ Task: WebSocket transport + relay server (DISCOVERED future #2 — co-op ข้�
 Status: DONE
 Evidence: server/mp-server.mjs (relay แยกห้องตาม field room, npm run mp-server, PORT env) + web/src/ws-transport.ts (queue ก่อน open + bind frame ผูกห้องทันที + injectable WS impl) + main.ts (เปิดห้อง/เข้าร่วมผ่านเซิร์ฟเวอร์จาก UI) + index.html (ช่อง ws:// URL); tests/web-ws-transport.test.ts (2 integration tests ผ่าน relay จริง: join/welcome/action/world + กันข้ามห้อง); suite 145/145 PASS; check + web typecheck + vite build PASS; ทดสอบ server เริ่ม/ตอบ HTTP ได้
 Commit: (commit ถัดจาก CP-016)
+
+## CP-017
+Task: Pixel-art item icons (DISCOVERED)
+Status: DONE
+Evidence: web/src/icons.ts (painters 16x16 สำหรับ item ครบทุก id ใน registry + iconCanvas/iconDataUrl/iconHTML + cache + fallback emoji เมื่อไม่มี DOM) + main.ts (quickbar/craft/trade/use-btn ใช้ pixel icon, ของบนพื้นวาด drawImage); .picon CSS; tests/web-icons-music.test.ts (3 icons tests); suite 150/150 ณ ตอนนั้น PASS
+Commit: (commit ถัดจาก CP-017)
+
+## CP-018
+Task: เพลงสังเคราะห์ (DISCOVERED)
+Status: DONE
+Evidence: web/src/music.ts (noteFreq A4=440, DAY/NIGHT_THEME, buildSequence pure, MusicEngine look-ahead scheduler + setTheme/toggleMute ปลอดภัยไร้ DOM) + main.ts (ปุ่ม 🎵, สลับธีมตามกลางวัน/กลางคืนอัตโนมัติ, เริ่มเมื่อ unlock เสียง); tests +4; suite 152/152 PASS; check + web typecheck + vite build PASS
+Commit: (commit ถัดจาก CP-018)

@@ -1,7 +1,7 @@
 # STATUS — SuvivalAcraft Open World
 
 ไฟล์เช็คสถานะการทำงานกลาง (source of truth) สำหรับ AI และผู้พัฒนา
-อัปเดตครั้งล่าสุด: 2026-09-17 (UTC) — รอบ 3 เสร็จสมบูรณ์: เคลียร์ backlog ทั้งหมด (CP-005..CP-014)
+อัปเดตครั้งล่าสุด: 2026-09-17 (UTC) — รอบ 4: เคลียร์ FUTURE/DISCOVERED ครบ (CP-015..CP-018) — ทั้ง repo ไม่มีงานค้าง
 
 > กติกา: อ่านไฟล์นี้ก่อนเริ่มงานทุกครั้ง / อัปเดตหลังงานทุกครั้ง
 > เพิ่มงานใหม่ได้ตลอดที่หัวข้อ "เพิ่มงาน / คำสั่งใหม่" — ใส่ timestamp, ผู้เสนอ, และสถานะ
@@ -24,7 +24,7 @@
 
 ## 2. สถานะล่าสุด (Checkpoint)
 
-- **งานกำลังทำ (IN PROGRESS)**: ไม่มี — MASTER TASK LIST ครบ 17/17, tests 141/141 PASS
+- **งานกำลังทำ (IN PROGRESS)**: ไม่มี — MASTER TASK LIST 17/17 + FUTURE ครบ, tests 152/152 PASS
 - **สรุปรอบนี้ (2026-09-17, Arena Agent)**:
   - CP-005 Building UI: วาง/ทุบ fence/wall/door/campfire + เปิด-ปิดประตู + สูตรคราฟต์ 4 ใหม่
   - CP-006 Farming UI: ปลูก/โต 3 ระยะ/เก็บเกี่ยว + เควสเก็บเกี่ยว + เมล็ดจากเบอร์รี่
@@ -70,7 +70,7 @@
 - [x] ~~Quest system~~: chain + explore/talk/boss (CP-012); fish/collect-all = future
 - [x] ~~Farming~~: ปุ๋ย + corn variety (CP-011); น้ำ/soil moisture = future
 - [x] ~~ระบบวัน/คืน + mob spawn ตามเวลา~~: spawn กลางวัน/คืนต่างกัน + บอสทุก 3 วัน (CP-010)
-- [ ] เติม item icons จริงแทน emoji (future: งานศิลป์)
+- [x] ~~เติม item icons จริงแทน emoji~~: pixel art 16x16 ทุก item (CP-017)
 - [x] ~~CI~~: .github/workflows/ci.yml (CP-014)
 
 ## 5. วิธีต่องาน (Handoff สำหรับ AI ตัวต่อไป)
@@ -101,3 +101,5 @@
 - [x] 2026-09-17 — Building UI (CP-005) + Farming UI (CP-006) + Local Save IndexedDB/เลือกโลก/autosave (CP-007) — Arena Agent
 
 - [x] 2026-09-17 (รอบ 3 ต่อ) — CP-008..CP-014: World Events / Temperature / Durability / Content Pack+เนื้อหา / Farming ขยาย / Quest chain+Audio / Co-op / CI — Arena Agent — **MASTER TASK LIST 17/17 DONE, tests 141/141**
+
+- [x] 2026-09-17 (รอบ 4) — CP-015..CP-018: co-op world sync / ws relay ข้ามเครื่อง / pixel icons / เพลงสังเคราะห์ — Arena Agent — tests 152/152

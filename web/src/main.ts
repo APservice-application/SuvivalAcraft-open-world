@@ -15,6 +15,8 @@ import { applyContentPack, packFromStorage } from "./content.js";
 import { ENEMY_KINDS, enemyStats, rollEnemyKind, shouldSpawnBoss } from "./bestiary.js";
 import { QuestLog } from "./quests.js";
 import { Sfx } from "./audio.js";
+import { iconHTML, iconCanvas } from "./icons.js";
+import { MusicEngine, THEME_STEPS, themeLengthSec } from "./music.js";
 import {
   HostSession, GuestSession, BroadcastChannelTransport,
   makeRoomCode, makePlayerId, type MpPlayerState, type Transport, type MpAction,
@@ -96,6 +98,8 @@ let questLog = new QuestLog();
 let visitedZones = new Set<string>();
 let lastLevel = 0;
 const sfx = new Sfx();
+const music = new MusicEngine();
+let musicBtnEl: HTMLElement | null = null;
 let questEl: HTMLElement | null = null;
 
 // ---------- Crafting ----------
@@ -137,6 +141,18 @@ function buildDynamicUI(): void {
   craftEl.style.cssText = "position:absolute;right:10px;bottom:150px;width:210px;max-height:46%;overflow:auto;background:rgba(10,16,30,.96);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:10px;z-index:7;display:none;";
   hud.appendChild(craftEl);
 
+  // music toggle (ซ้ายของปุ่มเมนู)
+  musicBtnEl = document.createElement("button");
+  musicBtnEl.id = "btn-music";
+  musicBtnEl.textContent = "🎵";
+  musicBtnEl.style.cssText = "position:absolute;top:calc(max(8px,env(safe-area-inset-top)) + 4px);right:56px;width:40px;height:40px;border-radius:10px;border:1px solid rgba(255,255,255,.3);background:rgba(10,16,30,.8);color:#fff;font-size:16px;z-index:6;";
+  musicBtnEl.addEventListener("click", () => {
+    const muted = music.toggleMute();
+    if (musicBtnEl) musicBtnEl.textContent = muted ? "🎵✕" : "🎵";
+    notify(muted ? "🎵 ปิดเพลง" : "🎵 เปิดเพลง", "#9fb0d8");
+  });
+  hud.appendChild(musicBtnEl);
+
   // event banner (top-center under msg)
   bannerEl = document.createElement("div");
   bannerEl.style.cssText = "position:absolute;top:calc(max(8px,env(safe-area-inset-top)) + 84px);left:50%;transform:translateX(-50%);background:rgba(10,16,30,.85);border:1px solid rgba(255,213,79,.4);color:#ffd54f;font-size:12px;padding:4px 10px;border-radius:8px;z-index:6;display:none;pointer-events:none;";
@@ -162,10 +178,10 @@ function renderCraft(): void {
   </div>`;
   for (const r of RECIPES) {
     const ok = canCraft(r, player);
-    const need = r.needs.map((n) => `${ITEMS[n.item]?.icon ?? ""} ${countItems(player, n.item)}/${n.count}`).join(" · ");
+    const need = r.needs.map((n) => `${iconHTML(n.item)} ${countItems(player, n.item)}/${n.count}`).join(" · ");
     html += `<div style="padding:6px;border:1px solid ${ok ? "rgba(143,176,255,.6)" : "rgba(255,255,255,.12)"};border-radius:8px;margin-bottom:6px;background:${ok ? "rgba(143,176,255,.14)" : "transparent"};opacity:${ok ? "1" : ".6"}">
       <div style="font-size:14px;display:flex;justify-content:space-between;align-items:center">
-        <span>${r.icon} ${r.name}</span>
+        <span>${iconHTML(r.out.item)} ${r.name}</span>
         <button data-craft="${r.id}" style="border:0;border-radius:6px;padding:4px 8px;background:${ok ? "#577cff" : "#2a3450"};color:${ok ? "#06101f" : "#8b93ad"};font-weight:700" ${ok ? "" : "disabled"}>คราฟต์</button>
       </div>
       <div style="font-size:11px;color:#9fb0d8">${need}</div>
@@ -284,6 +300,7 @@ function startGame(p: PlayerState, seed: number, t: number, restore?: WorldSaveV
     visitedZones = new Set();
   }
   lastLevel = player.level;
+  music.setTheme(dayDarkness() > 0.5 ? "night" : "day");
   notify(`ยินดีต้อนรับ ${p.name} 🏕️`, "#aaf0c2");
   showScreen("none");
   showHud(true);
@@ -574,8 +591,17 @@ function render(): void {
   // ground pickups
   for (const pk of pickups) {
     const ps = worldToScreen(pk.x, pk.z);
-    ctx.font = "10px monospace";
-    ctx.fillText(pk.item === "gold" ? "🪙" : (ITEMS[pk.item]?.icon ?? "📦"), ps.sx + 3, ps.sy + 12);
+    if (pk.item === "gold") {
+      ctx.font = "10px monospace";
+      ctx.fillText("🪙", ps.sx + 3, ps.sy + 12);
+    } else {
+      const ic = iconCanvas(pk.item) as HTMLCanvasElement | null;
+      if (ic) ctx.drawImage(ic, ps.sx, ps.sy, 16, 16);
+      else {
+        ctx.font = "10px monospace";
+        ctx.fillText(ITEMS[pk.item]?.icon ?? "📦", ps.sx + 3, ps.sy + 12);
+      }
+    }
   }
 
   // co-op: host world enemies (guest sees host-authoritative hostiles, tinted)
@@ -928,13 +954,13 @@ function useButtonLabel(): string {
   const s = player.inv[selectedSlot];
   if (!s) return "";
   const b = buildableByItem(s.item);
-  if (b) return `${b.icon}<br/><span style="font-size:9px">วาง</span>`;
-  if (cropBySeedItem(s.item)) return `🌱<br/><span style="font-size:9px">ปลูก</span>`;
-  if (s.item === "fertilizer") return `✨<br/><span style="font-size:9px">ปุ๋ย</span>`;
+  if (b) return `${iconHTML(s.item)}<br/><span style="font-size:9px">วาง</span>`;
+  if (cropBySeedItem(s.item)) return `${iconHTML(s.item)}<br/><span style="font-size:9px">ปลูก</span>`;
+  if (s.item === "fertilizer") return `${iconHTML(s.item)}<br/><span style="font-size:9px">ปุ๋ย</span>`;
   const def = ITEMS[s.item];
-  if (def?.category === "food") return `${def.icon}<br/><span style="font-size:9px">กิน</span>`;
-  if (def?.category === "tool" || def?.category === "weapon") return `${def.icon}<br/><span style="font-size:9px">ถือ</span>`;
-  return `${def?.icon ?? ""}<br/><span style="font-size:9px">ใช้</span>`;
+  if (def?.category === "food") return `${iconHTML(s.item)}<br/><span style="font-size:9px">กิน</span>`;
+  if (def?.category === "tool" || def?.category === "weapon" || def?.category === "armor") return `${iconHTML(s.item)}<br/><span style="font-size:9px">ถือ</span>`;
+  return `${iconHTML(s.item)}<br/><span style="font-size:9px">ใช้</span>`;
 }
 
 // ============================================================
@@ -1081,7 +1107,8 @@ function renderTrade(): void {
     const gi = ITEMS[tr.give], ge = ITEMS[tr.get];
     const ok = countItems(player, tr.give) >= tr.giveCount;
     html += `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:6px;border:1px solid ${ok ? "rgba(255,213,79,.5)" : "rgba(255,255,255,.12)"};border-radius:8px;margin-bottom:6px">
-      <span style="font-size:12px">${gi?.icon ?? ""}${tr.giveCount} ➜ ${ge?.icon ?? ""}${tr.getCount} ${ge?.name ?? ""}</span>
+      <span style="font-size:12px">${iconHTML(tr.give)}${tr.giveCount} ➜ ${iconHTML(tr.get)}${tr.getCount} ${ge?.name ?? ""}</span>
+      <span style="display:none">${gi?.icon ?? ""}</span>
       <button data-trade="${i}" style="border:0;border-radius:6px;padding:4px 8px;background:${ok ? "#b8860b" : "#2a3450"};color:${ok ? "#06101f" : "#8b93ad"};font-weight:700" ${ok ? "" : "disabled"}>แลก</button>
     </div>`;
   });
@@ -1196,7 +1223,7 @@ function renderQuickBar(): void {
     el.className = "qslot" + (i === selectedSlot ? " sel" : "");
     if (s) {
       const def = ITEMS[s.item];
-      el.innerHTML = `${def?.icon ?? ""}<br/><span style="font-size:10px;color:#fff">${s.count}${def && (def.category === "tool" || def.category === "weapon") ? "•" : ""}</span>`;
+      el.innerHTML = `${iconHTML(s.item)}<br/><span style="font-size:10px;color:#fff">${s.count}${def && (def.category === "tool" || def.category === "weapon") ? "•" : ""}</span>`;
     }
     el.addEventListener("touchstart", (e) => { e.preventDefault(); quickUse(i); }, { passive: false });
     el.addEventListener("mousedown", (e) => { e.preventDefault(); quickUse(i); });
@@ -1460,6 +1487,11 @@ function update(dt: number): void {
   time += dt / DAY_LEN * 24;
   if (time >= 24) { time -= 24; dayCount++; }
 
+  // music: สลับธีมกลางวัน/กลางคืน + เริ่มเล่นเมื่อปลดล็อกเสียงแล้ว
+  const wantTheme = dayDarkness() > 0.5 ? "night" : "day";
+  music.setTheme(wantTheme);
+  if (!music.muted) music.start();
+
   // farming growth
   farmingTick(dt);
 
@@ -1600,7 +1632,11 @@ async function init(): Promise<void> {
   setupControls();
 
   // audio unlock on first user gesture (autoplay policy)
-  const unlockAudio = () => sfx.unlock();
+  const unlockAudio = () => {
+    sfx.unlock();
+    music.unlock();
+    if (!music.muted) music.start();
+  };
   addEventListener("pointerdown", unlockAudio, { once: true });
   addEventListener("touchstart", unlockAudio, { once: true });
   addEventListener("keydown", unlockAudio, { once: true });
