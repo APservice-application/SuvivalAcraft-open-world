@@ -40,9 +40,9 @@ Engine แยกออกจาก Renderer (game/ = logic Engine, web/ = Render
 
 # CURRENT WORK
 
-Task: (ว่าง — รอเลือกงานถัดไปจาก REMAINING)
-Owner: -
-Status: AVAILABLE
+Task: เคลียร์ REMAINING ทั้งหมด — 14 World Events / 06 Temperature / 07 Durability+sort / 17 Content Pack + content ใหม่ / Farming ขยาย / Quest chain+explore / Audio / 16 LAN / CI
+Owner: Arena Agent
+Status: IN_PROGRESS (claimed 2026-09-17 รอบ 2) — ทำเป็น CP-008..CP-014 ทีละ checkpoint
 
 ---
 
