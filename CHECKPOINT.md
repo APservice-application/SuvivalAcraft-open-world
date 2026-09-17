@@ -79,7 +79,7 @@ Status: IN_PROGRESS (claimed 2026-09-17 รอบ 2) — ทำเป็น CP-0
 
 # LAST COMPLETED
 
-CP-009 Temperature + Durability + Inventory sort (task 06/07) (ก่อนหน้า: CP-008 World Events)
+CP-010 Content Pack (17) + เนื้อหาใหม่: เกราะหนัง/หนังสัตว์/ศัตรู 4 ชนิด/บอสราชาสไลม์/หิมะ (ก่อนหน้า: CP-009 Temperature+Durability)
 
 ---
 
@@ -166,3 +166,9 @@ Task: 06 Temperature + 07 Inventory durability/metadata + ปุ่มจัด�
 Status: DONE
 Evidence: web/src/climate.ts (ambient ตามเวลา/พายุ/ไฟป่า + warmth drain/regen/heat source) + web/src/inventory.ts (sortSlots merge+tie-break, wearSlot) + state.ts (Slot.dur, ItemDef.maxDur, PlayerState.warmth, craftRecipe แถม dur เต็ม, equippedDefense/damageAfterDefense, สวม armor) + main.ts (temperature tick + หนาว/ร้อนลด HP, อาวุธ/เครื่องมือสึกจนแตก, เกราะลดดาเมจ, ปุ่ม ↕ จัดเรียง, HUD 🌡/🪙); tests/web-climate-inventory.test.ts (12 tests); suite 110/110 PASS; check PASS; web typecheck PASS; vite build PASS
 Commit: (commit ถัดจาก CP-009)
+
+## CP-010
+Task: 17 Content Update System + content ใหม่ (armor/hide/enemies/boss/snow)
+Status: DONE
+Evidence: web/src/content.ts (merge/apply pack, ตรวจ reference ก่อนเพิ่มสูตร) + web/src/bestiary.ts (ENEMY_KINDS 4 ชนิด + rollEnemyKind + shouldSpawnBoss) + state.ts (hide/hide_armor + สูตร) + world.ts (T_SNOW patches) + main.ts (spawn ตามกลางวัน/คืน, บอสทุกคืนวันที่หาร 3, draw ขนาด/สี/มงกุฎ, loot hide/gold, content pack จาก localStorage); tests/web-content-bestiary.test.ts (8 tests); suite 118/118 PASS; check PASS; web typecheck PASS; vite build PASS
+Commit: (commit ถัดจาก CP-010)

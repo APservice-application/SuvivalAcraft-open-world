@@ -34,6 +34,9 @@ export const ITEMS: Record<string, ItemDef> = {
   // farming
   wheat_seed: { id: "wheat_seed", name: "เมล็ดพืช", category: "misc", icon: "🌱", stack: 30 },
   wheat: { id: "wheat", name: "ข้าว", category: "food", icon: "🌾", stack: 30, food: 3 },
+  // เนื้อหาใหม่ (CP-010)
+  hide: { id: "hide", name: "หนังสัตว์", category: "resource", icon: "🟫", stack: 30 },
+  hide_armor: { id: "hide_armor", name: "เสื้อหนัง", category: "armor", icon: "🥼", stack: 1, defense: 2, maxDur: 80 },
 };
 
 export interface Slot { item: string; count: number; /** ความทนทานคงเหลือ (เฉพาะของที่มี maxDur) */ dur?: number; }
@@ -59,6 +62,7 @@ export const RECIPES: Recipe[] = [
   { id: "wall", name: "กำแพงหิน", icon: "🧱", out: { item: "wall", count: 1 }, needs: [{ item: "stone", count: 4 }] },
   { id: "door", name: "ประตูไม้", icon: "🚪", out: { item: "door", count: 1 }, needs: [{ item: "wood", count: 4 }] },
   { id: "campfire", name: "แคมป์ไฟ", icon: "🔥", out: { item: "campfire", count: 1 }, needs: [{ item: "wood", count: 3 }, { item: "stone", count: 2 }] },
+  { id: "hide_armor", name: "เสื้อหนัง", icon: "🥼", out: { item: "hide_armor", count: 1 }, needs: [{ item: "hide", count: 4 }, { item: "fiber", count: 2 }] },
 ];
 
 export interface PlayerState {

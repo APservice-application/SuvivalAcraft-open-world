@@ -1,5 +1,5 @@
 // SuvivalAcraft Open World — main game wiring (mobile-first, touch-first)
-import { World, TILE_SIZE, T_WATER, T_STONE, T_ROCK, T_TREE, T_BUSH, T_BERRY, T_GRASS, T_GRASS_ALT, T_DIRT, T_SAND, T_FLOOR, T_PATH, T_FENCE, T_WALL, T_DOOR, T_DOOR_OPEN, T_CAMPFIRE, T_TILLED, T_CROP_0, T_CROP_1, T_CROP_2, tileName } from "./world.js";
+import { World, TILE_SIZE, T_WATER, T_STONE, T_ROCK, T_TREE, T_BUSH, T_BERRY, T_GRASS, T_GRASS_ALT, T_DIRT, T_SAND, T_FLOOR, T_PATH, T_FENCE, T_WALL, T_DOOR, T_DOOR_OPEN, T_CAMPFIRE, T_TILLED, T_CROP_0, T_CROP_1, T_CROP_2, T_SNOW, tileName } from "./world.js";
 import {
   PlayerState, newPlayer, addItem, removeItem, countItems, canCraft, craftRecipe,
   useItem, equippedDamage, damageAfterDefense, survivalTick, addXp, xpNeed,
@@ -11,6 +11,8 @@ import { SaveManager, pickStore, LEGACY_KEY, type WorldSaveV2, type WorldMeta } 
 import { EventScheduler, eventDef, type EventKind } from "./events.js";
 import { ambientTemperature, warmthStep } from "./climate.js";
 import { sortSlots, wearSlot } from "./inventory.js";
+import { applyContentPack, packFromStorage } from "./content.js";
+import { ENEMY_KINDS, enemyStats, rollEnemyKind, shouldSpawnBoss } from "./bestiary.js";
 import { TouchJoystick, KeyboardInput, setupButton } from "./controls.js";
 
 // ---------- DOM ----------
@@ -61,7 +63,8 @@ let attackCooldown = 0;
 // facing direction (unit-ish grid direction of last movement)
 let faceX = 1, faceZ = 0;
 
-interface Enemy { x: number; y: number; hp: number; maxHp: number; dmg: number; kind: string; aggro: boolean; }
+interface Enemy { x: number; y: number; hp: number; maxHp: number; dmg: number; kind: string; aggro: boolean; spd: number; size: number; }
+let bossSpawnedOnDay: number | null = null;
 let enemies: Enemy[] = [];
 let spawnTimer = 0;
 
@@ -382,6 +385,7 @@ function drawTileScreenSpace(sx: number, sy: number, id: number): void {
     case T_CROP_0: ctx.fillStyle = "#5e4626"; break;
     case T_CROP_1: ctx.fillStyle = "#5e4626"; break;
     case T_CROP_2: ctx.fillStyle = "#5e4626"; break;
+    case T_SNOW: ctx.fillStyle = "#e8eef5"; break;
     default: ctx.fillStyle = "#3f8f43";
   }
   ctx.fillRect(sx, sy, TILE_SIZE, TILE_SIZE);
@@ -477,18 +481,26 @@ function render(): void {
   // enemies
   for (const e of enemies) {
     const { sx, sy } = worldToScreen(e.x, e.y);
-    ctx.fillStyle = e.kind === "slime" ? "#7ce0a0" : "#d97878";
-    ctx.fillRect(sx + 3, sy + 3, 10, 10);
+    const st = enemyStats(e.kind);
+    const sz = e.size || st.size;
+    const ox = (16 - sz) / 2;
+    ctx.fillStyle = e.kind === "slime" ? "#7ce0a0" : e.kind === "goblin" ? "#d97878" : e.kind === "brute" ? "#a3553f" : "#b56ad7";
+    ctx.fillRect(sx + ox, sy + ox, sz, sz);
     // hp bar
     const pct = e.hp / e.maxHp;
     ctx.fillStyle = "#14203a";
-    ctx.fillRect(sx, sy - 3, 14, 2);
+    ctx.fillRect(sx, sy - 3, 16, 2);
     ctx.fillStyle = pct > 0.5 ? "#7ce07c" : "#e05353";
-    ctx.fillRect(sx, sy - 3, 14 * pct, 2);
+    ctx.fillRect(sx, sy - 3, 16 * pct, 2);
     // eyes
     ctx.fillStyle = "#000";
-    ctx.fillRect(sx + 5, sy + 5, 2, 2);
-    ctx.fillRect(sx + 10, sy + 5, 2, 2);
+    const ex1 = sx + ox + sz * 0.3, ex2 = sx + ox + sz * 0.7, ey = sy + ox + sz * 0.35;
+    ctx.fillRect(ex1, ey, 2, 2);
+    ctx.fillRect(ex2, ey, 2, 2);
+    if (st.boss) {
+      ctx.font = "10px monospace";
+      ctx.fillText("👑", sx + 3, sy - 5);
+    }
   }
 
   // world event visuals
@@ -573,7 +585,7 @@ function renderMinimap(): void {
       const wx = Math.floor(camX + (mx - size / 2) / scale);
       const wy = Math.floor(camY + (my - size / 2) / scale);
       const id = world.tileAt(wx, wy);
-      c.fillStyle = id === T_WATER ? "#3a7bd5" : id === T_TREE ? "#2e6b2e" : id === T_ROCK ? "#777" : id === T_SAND ? "#d9c27a" : "#3f8f43";
+      c.fillStyle = id === T_WATER ? "#3a7bd5" : id === T_TREE ? "#2e6b2e" : id === T_ROCK ? "#777" : id === T_SAND ? "#d9c27a" : id === T_SNOW ? "#dfe7ee" : "#3f8f43";
       c.fillRect(mx, my, 1, 1);
     }
   }
@@ -594,25 +606,44 @@ function renderMinimap(): void {
 //  COMBAT / ENEMIES
 // ============================================================
 function spawnEnemies(): void {
+  const isNight = dayDarkness() > 0.5;
   while (enemies.length < 3) {
     const ang = Math.random() * Math.PI * 2;
     const dist = 30 + Math.random() * 80;
     const ex = Math.round(camX + Math.cos(ang) * dist);
     const ey = Math.round(camY + Math.sin(ang) * dist);
     if (!world.isWalkable(ex, ey)) continue;
-    enemies.push({ x: ex, y: ey, hp: 12, maxHp: 12, dmg: 3, kind: Math.random() < 0.5 ? "slime" : "goblin", aggro: false });
+    const kind = rollEnemyKind(isNight, Math.random());
+    const st = enemyStats(kind);
+    enemies.push({ x: ex, y: ey, hp: st.hp, maxHp: st.hp, dmg: st.dmg, kind, aggro: false, spd: st.spd, size: st.size });
   }
 }
 
 function updateEnemies(dt: number): void {
   spawnTimer -= dt;
   if (spawnTimer <= 0) { spawnEnemies(); spawnTimer = 5; }
+
+  // boss: ราชาสไลม์ ทุกคืนของวันที่หาร 3 ลงตัว
+  if (shouldSpawnBoss(dayCount, dayDarkness() > 0.5, bossSpawnedOnDay) && !enemies.some((e) => e.kind === "slime_king")) {
+    for (let tries = 0; tries < 30; tries++) {
+      const ang = Math.random() * Math.PI * 2;
+      const dist = 18 + Math.random() * 14;
+      const ex = Math.round(player.pos.x + Math.cos(ang) * dist);
+      const ey = Math.round(player.pos.y + Math.sin(ang) * dist);
+      if (!world.isWalkable(ex, ey)) continue;
+      const st = enemyStats("slime_king");
+      enemies.push({ x: ex, y: ey, hp: st.hp, maxHp: st.hp, dmg: st.dmg, kind: st.kind, aggro: true, spd: st.spd, size: st.size });
+      bossSpawnedOnDay = dayCount;
+      notify("👑 ราชาสไลม์ปรากฏตัว!", "#ff8a80");
+      break;
+    }
+  }
   for (const e of enemies) {
     const dx = player.pos.x - e.x, dy = player.pos.y - e.y;
     const dist = Math.hypot(dx, dy);
     if (dist < 14) e.aggro = true;
     if (e.aggro) {
-      const speed = 2.4 * dt;
+      const speed = e.spd * dt;
       if (dist > 1) {
         e.x += (dx / dist) * speed;
         e.y += (dy / dist) * speed;
@@ -645,12 +676,24 @@ function attack(): void {
     wearEquipped(1);
     notify(`โจมตี ${best.kind}! -${dmg}`, "#ffd54f");
     if (best.hp <= 0) {
-      notify(`⚔️ กำจัด ${best.kind}! +20 XP`, "#aaf0c2");
-      addXp(player, 20);
+      const st = enemyStats(best.kind);
+      notify(`⚔️ กำจัด ${st.name}! +${st.xp} XP`, "#aaf0c2");
+      addXp(player, st.xp);
       questProgress("kill_slime", 1);
+      if (st.boss) {
+        questProgress("boss", 1);
+        notify("👑 กำจัดราชาสไลม์ได้แล้ว!", "#ffd54f");
+      }
       // loot
       const loot = Math.random() < 0.4 ? "meat_raw" : Math.random() < 0.5 ? "fiber" : null;
       if (loot) { addItem(player, loot, 1); notify(`ได้รับ ${ITEMS[loot]?.icon} ${ITEMS[loot]?.name}`, "#aaf0c2"); }
+      if (st.hideChance && Math.random() < st.hideChance) {
+        const n = st.boss ? 3 : 1;
+        addItem(player, "hide", n);
+        notify(`ได้รับ 🟫 หนังสัตว์ x${n}`, "#aaf0c2");
+      }
+      if (st.gold) { player.gold += st.gold; notify(`🪙 +${st.gold} gold`, "#ffd54f"); }
+      renderHud();
       if (addXpLevelCheck()) return;
     }
   } else {
@@ -844,7 +887,9 @@ function spawnEnemyNear(dist: number): void {
     const ex = Math.round(player.pos.x + Math.cos(ang) * dist);
     const ey = Math.round(player.pos.y + Math.sin(ang) * dist);
     if (!world.isWalkable(ex, ey)) continue;
-    enemies.push({ x: ex, y: ey, hp: 12, maxHp: 12, dmg: 3, kind: Math.random() < 0.5 ? "slime" : "goblin", aggro: true });
+    const kind = rollEnemyKind(dayDarkness() > 0.5, Math.random());
+    const st = enemyStats(kind);
+    enemies.push({ x: ex, y: ey, hp: st.hp, maxHp: st.hp, dmg: st.dmg, kind, aggro: true, spd: st.spd, size: st.size });
     return;
   }
 }
@@ -1261,6 +1306,15 @@ async function init(): Promise<void> {
   } catch {
     saveMgr = null; // game still playable without saves
   }
+
+  // optional content pack (task 17): localStorage["suvival:content-pack"]
+  try {
+    const pack = packFromStorage(localStorage.getItem("suvival:content-pack"));
+    if (pack) {
+      const res = applyContentPack(pack);
+      notify(`📦 content pack "${pack.name}": +${res.itemsAdded} items, ~${res.itemsOverridden} override, +${res.recipesAdded} recipes`, "#9fb0d8");
+    }
+  } catch { /* ignore pack errors */ }
 
   setupControls();
 

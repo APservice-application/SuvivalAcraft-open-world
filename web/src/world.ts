@@ -31,6 +31,7 @@ export const T_TILLED = 17;
 export const T_CROP_0 = 18;
 export const T_CROP_1 = 19;
 export const T_CROP_2 = 20; // mature
+export const T_SNOW = 21;
 
 const CHUNK = 24;
 
@@ -86,6 +87,11 @@ export class World {
         const wz = cz * CHUNK + lz;
         const n = hash01(wx, wz, this.seed);
         let t = T_GRASS;
+        // snow patches (CP-010)
+        if (hash01(wx, wz, this.seed + 23) < 0.06) {
+          tiles[lz * CHUNK + lx] = T_SNOW;
+          continue;
+        }
         // Water / river pockets
         if (n < 0.12) t = T_WATER;
         else if (n < 0.3) t = T_GRASS_ALT;
