@@ -60,7 +60,7 @@ describe("SaveManager", () => {
       gameSeconds: 720,
       player: newPlayer("เอ", "#fff000", 1, 2),
       edits: [[1, 2, 12]],
-      crops: { "3,4": 100 },
+      crops: { "3,4": { crop: "wheat", plantedAt: 100 } },
       savedAt: Date.now(),
     };
     await mgr.saveWorld(save);
@@ -73,7 +73,7 @@ describe("SaveManager", () => {
     expect(loaded!.meta.name).toBe("โลกหนึ่ง");
     expect(loaded!.player.name).toBe("เอ");
     expect(loaded!.edits).toEqual([[1, 2, 12]]);
-    expect(loaded!.crops["3,4"]).toBe(100);
+    expect(loaded!.crops["3,4"]).toEqual({ crop: "wheat", plantedAt: 100 });
 
     await mgr.deleteWorld(w2.id);
     expect((await mgr.listWorlds()).map((m) => m.id)).toEqual([w1.id]);

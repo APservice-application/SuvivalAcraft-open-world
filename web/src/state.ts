@@ -34,6 +34,9 @@ export const ITEMS: Record<string, ItemDef> = {
   // farming
   wheat_seed: { id: "wheat_seed", name: "เมล็ดพืช", category: "misc", icon: "🌱", stack: 30 },
   wheat: { id: "wheat", name: "ข้าว", category: "food", icon: "🌾", stack: 30, food: 3 },
+  corn_seed: { id: "corn_seed", name: "เมล็ดข้าวโพด", category: "misc", icon: "🌽", stack: 30 },
+  corn: { id: "corn", name: "ข้าวโพด", category: "food", icon: "🌽", stack: 30, food: 5, heal: 1 },
+  fertilizer: { id: "fertilizer", name: "ปุ๋ย", category: "misc", icon: "✨", stack: 20 },
   // เนื้อหาใหม่ (CP-010)
   hide: { id: "hide", name: "หนังสัตว์", category: "resource", icon: "🟫", stack: 30 },
   hide_armor: { id: "hide_armor", name: "เสื้อหนัง", category: "armor", icon: "🥼", stack: 1, defense: 2, maxDur: 80 },
@@ -63,6 +66,7 @@ export const RECIPES: Recipe[] = [
   { id: "door", name: "ประตูไม้", icon: "🚪", out: { item: "door", count: 1 }, needs: [{ item: "wood", count: 4 }] },
   { id: "campfire", name: "แคมป์ไฟ", icon: "🔥", out: { item: "campfire", count: 1 }, needs: [{ item: "wood", count: 3 }, { item: "stone", count: 2 }] },
   { id: "hide_armor", name: "เสื้อหนัง", icon: "🥼", out: { item: "hide_armor", count: 1 }, needs: [{ item: "hide", count: 4 }, { item: "fiber", count: 2 }] },
+  { id: "fertilizer", name: "ปุ๋ย", icon: "✨", out: { item: "fertilizer", count: 2 }, needs: [{ item: "fiber", count: 2 }, { item: "berry", count: 1 }] },
 ];
 
 export interface PlayerState {

@@ -6,7 +6,7 @@ import {
   ITEMS, RECIPES, Slot,
 } from "./state.js";
 import { buildableByItem, isDoorTile, toggledDoor, itemForBuildingTile, occupiedTile } from "./building.js";
-import { FarmPlots, cropStageAt, isMatureAt, plotKey } from "./farming.js";
+import { FarmPlots, CROPS, FERT_MULT, cropBySeedItem, plotKey } from "./farming.js";
 import { SaveManager, pickStore, LEGACY_KEY, type WorldSaveV2, type WorldMeta } from "./saves.js";
 import { EventScheduler, eventDef, type EventKind } from "./events.js";
 import { ambientTemperature, warmthStep } from "./climate.js";
@@ -238,7 +238,7 @@ function startGame(p: PlayerState, seed: number, t: number, restore?: WorldSaveV
     gameSeconds = restore.gameSeconds || 0;
     world.setEdits(restore.edits || []);
     farmPlots = new FarmPlots();
-    farmPlots.state = { ...(restore.crops || {}) };
+    farmPlots.loadFrom((restore.crops || {}) as Record<string, unknown>);
   } else {
     currentWorld = null;
     dayCount = 1;
@@ -285,7 +285,7 @@ async function saveNow(kind: "auto" | "manual"): Promise<void> {
     gameSeconds,
     player,
     edits: world.getEdits(),
-    crops: { ...farmPlots.state },
+    crops: { ...farmPlots.state } as { [k: string]: { crop: string; plantedAt: number; fert?: boolean } },
     savedAt: Date.now(),
   };
   try {
@@ -829,8 +829,12 @@ function useSelected(): void {
     placeBuilding(s.item);
     return;
   }
-  if (s.item === "wheat_seed") {
+  if (cropBySeedItem(s.item)) {
     plantSeed();
+    return;
+  }
+  if (s.item === "fertilizer") {
+    applyFertilizer();
     return;
   }
   quickUse(selectedSlot);
@@ -843,7 +847,8 @@ function useButtonLabel(): string {
   if (!s) return "";
   const b = buildableByItem(s.item);
   if (b) return `${b.icon}<br/><span style="font-size:9px">วาง</span>`;
-  if (s.item === "wheat_seed") return `🌱<br/><span style="font-size:9px">ปลูก</span>`;
+  if (cropBySeedItem(s.item)) return `🌱<br/><span style="font-size:9px">ปลูก</span>`;
+  if (s.item === "fertilizer") return `✨<br/><span style="font-size:9px">ปุ๋ย</span>`;
   const def = ITEMS[s.item];
   if (def?.category === "food") return `${def.icon}<br/><span style="font-size:9px">กิน</span>`;
   if (def?.category === "tool" || def?.category === "weapon") return `${def.icon}<br/><span style="font-size:9px">ถือ</span>`;
@@ -877,6 +882,7 @@ const TRADES: { give: string; giveCount: number; get: string; getCount: number }
   { give: "gold", giveCount: 8, get: "meat_cooked", getCount: 1 },
   { give: "gold", giveCount: 5, get: "torch", getCount: 2 },
   { give: "gold", giveCount: 4, get: "wheat_seed", getCount: 2 },
+  { give: "gold", giveCount: 7, get: "corn_seed", getCount: 2 },
   { give: "gold", giveCount: 6, get: "fence", getCount: 2 },
   { give: "wood", giveCount: 4, get: "gold", getCount: 3 },
 ];
@@ -1012,7 +1018,7 @@ function renderTrade(): void {
 // ============================================================
 const PLANTABLE_TILES = [T_GRASS, T_GRASS_ALT, T_DIRT];
 
-/** Plant the seed item at the facing tile (grass/dirt only). */
+/** Plant the selected seed item at the facing tile (grass/dirt only). */
 function plantSeed(): boolean {
   const ft = facingTile();
   const t = world.tileAt(ft.x, ft.z);
@@ -1024,22 +1030,32 @@ function plantSeed(): boolean {
     notify("ปลูกไม่ได้: มีสิ่งกีดขวาง", "#ff8a80");
     return false;
   }
-  if (!removeItem(player, "wheat_seed", 1)) {
+  const sel = selectedSlot >= 0 ? player.inv[selectedSlot] : undefined;
+  const crop = sel ? cropBySeedItem(sel.item) : undefined;
+  if (!crop || !removeItem(player, crop.seed, 1)) {
     notify("ไม่มีเมล็ดพืช", "#ff8a80");
     return false;
   }
-  farmPlots.plant(ft.x, ft.z, gameSeconds);
+  farmPlots.plant(ft.x, ft.z, crop.id, gameSeconds);
   world.setEdit(ft.x, ft.z, T_CROP_0);
-  notify("🌱 ปลูกเมล็ดพืชแล้ว รอโต...", "#aaf0c2");
+  notify(`${crop.icon} ปลูก${crop.name}แล้ว รอโต...`, "#aaf0c2");
   renderHud();
   return true;
+}
+
+/** Stage 0..2 ของแปลงตามชนิดพืช (นับ elapsed แบบมีปุ๋ยเร่ง) */
+function stageOf(cropId: string, plantedAt: number, fert: boolean): 0 | 1 | 2 {
+  const crop = CROPS[cropId];
+  if (!crop) return 0;
+  const el = (gameSeconds - plantedAt) * (fert ? FERT_MULT : 1);
+  return el >= crop.stages[2] ? 2 : el >= crop.stages[1] ? 1 : 0;
 }
 
 /** Advance crop growth; syncs world tiles to current stage. */
 function farmingTick(dt: number): void {
   gameSeconds += dt;
   for (const e of farmPlots.entries()) {
-    const stage = cropStageAt(e.plantedAt, gameSeconds);
+    const stage = stageOf(e.plot.crop, e.plot.plantedAt, !!e.plot.fert);
     const tile = T_CROP_0 + stage;
     if (world.tileAt(e.x, e.z) !== tile) world.setEdit(e.x, e.z, tile);
   }
@@ -1047,21 +1063,33 @@ function farmingTick(dt: number): void {
 
 /** Harvest a mature crop at (x,z). */
 function harvestCrop(x: number, z: number): void {
-  const planted = farmPlots.state[plotKey(x, z)];
-  if (planted === undefined) return;
-  if (!isMatureAt(planted, gameSeconds)) {
+  if (!farmPlots.has(x, z)) return;
+  if (!farmPlots.matureAt(x, z, gameSeconds)) {
     notify("🌱 พืชยังไม่โต", "#ffd54f");
     return;
   }
-  farmPlots.harvest(x, z);
+  const crop = farmPlots.harvest(x, z);
+  if (!crop) return;
   world.setEdit(x, z, T_TILLED);
-  const cnt = 1 + (Math.random() < 0.5 ? 1 : 0);
-  addItem(player, "wheat", cnt);
-  if (Math.random() < 0.5) addItem(player, "wheat_seed", 1);
+  const cnt = crop.harvestMin + Math.floor(Math.random() * (crop.harvestMax - crop.harvestMin + 1));
+  addItem(player, crop.harvestItem, cnt);
+  if (Math.random() < crop.seedChance) addItem(player, crop.seed, 1);
   addXp(player, 5);
   questProgress("harvest_crop", 1);
-  notify(`🌾 เก็บข้าว x${cnt} +5 XP`, "#aaf0c2");
+  notify(`${crop.icon} เก็บ${crop.name} x${cnt} +5 XP`, "#aaf0c2");
   renderHud();
+}
+
+/** ใส่ปุ๋ยแปลงที่หันหน้าไป (โตเร็วขึ้น) */
+function applyFertilizer(): boolean {
+  const ft = facingTile();
+  if (!farmPlots.has(ft.x, ft.z)) { notify("ใส่ปุ๋ยได้เฉพาะแปลงปลูก", "#ff8a80"); return false; }
+  if (farmPlots.matureAt(ft.x, ft.z, gameSeconds)) { notify("พืชสุกแล้ว เก็บได้เลย", "#ffd54f"); return false; }
+  if (!farmPlots.fertilize(ft.x, ft.z)) { notify("แปลงนี้ใส่ปุ๋ยไปแล้ว", "#ffd54f"); return false; }
+  if (!removeItem(player, "fertilizer", 1)) return false;
+  notify("✨ ใส่ปุ๋ยแล้ว พืชโตเร็วขึ้น!", "#aaf0c2");
+  renderHud();
+  return true;
 }
 
 // ============================================================

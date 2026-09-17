@@ -3,6 +3,7 @@
 // Save format v2 (multi-world). Legacy v1 single-slot payload is migrated once.
 
 import type { PlayerState } from "./state.js";
+import type { PlotSave } from "./farming.js";
 
 export interface WorldMeta {
   id: string;
@@ -21,8 +22,8 @@ export interface WorldSaveV2 {
   player: PlayerState;
   /** world edits from player: [x, z, tile][] */
   edits: [number, number, number][];
-  /** farm plots: key "x,z" -> plantedAt (gameSeconds) */
-  crops: Record<string, number>;
+  /** farm plots: key "x,z" -> plot (crop + plantedAt + fert) */
+  crops: Record<string, PlotSave>;
   savedAt: number;
 }
 

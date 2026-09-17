@@ -79,7 +79,7 @@ Status: IN_PROGRESS (claimed 2026-09-17 รอบ 2) — ทำเป็น CP-0
 
 # LAST COMPLETED
 
-CP-010 Content Pack (17) + เนื้อหาใหม่: เกราะหนัง/หนังสัตว์/ศัตรู 4 ชนิด/บอสราชาสไลม์/หิมะ (ก่อนหน้า: CP-009 Temperature+Durability)
+CP-011 Farming ขยาย: ปุ๋ยเร่งโต + ข้าวโพด + save format v2 plots (ก่อนหน้า: CP-010 Content Pack)
 
 ---
 
@@ -172,3 +172,9 @@ Task: 17 Content Update System + content ใหม่ (armor/hide/enemies/boss/s
 Status: DONE
 Evidence: web/src/content.ts (merge/apply pack, ตรวจ reference ก่อนเพิ่มสูตร) + web/src/bestiary.ts (ENEMY_KINDS 4 ชนิด + rollEnemyKind + shouldSpawnBoss) + state.ts (hide/hide_armor + สูตร) + world.ts (T_SNOW patches) + main.ts (spawn ตามกลางวัน/คืน, บอสทุกคืนวันที่หาร 3, draw ขนาด/สี/มงกุฎ, loot hide/gold, content pack จาก localStorage); tests/web-content-bestiary.test.ts (8 tests); suite 118/118 PASS; check PASS; web typecheck PASS; vite build PASS
 Commit: (commit ถัดจาก CP-010)
+
+## CP-011
+Task: Farming ขยาย (ปุ๋ย/แปลง, crop variety)
+Status: DONE
+Evidence: web/src/farming.ts v2 (CROPS wheat/corn คนละ timing+yield, cropStage crop-aware, FERT_MULT=1.6, fertilize ครั้งเดียว/แปลง, normalizePlot migration จาก number, loadFrom รับ mixed payload) + state.ts (corn_seed/corn/fertilizer + สูตรปุ๋ย) + saves.ts (crops type PlotSave) + main.ts (plantSeed เลือกตามเมล็ดที่ถือ, applyFertilizer, harvestCrop ตาม crop def, TRADES เพิ่ม corn_seed); tests/web-farming.test.ts rewrite + saves test update; suite 120/120 PASS; check PASS; web typecheck PASS; vite build PASS
+Commit: (commit ถัดจาก CP-011)
