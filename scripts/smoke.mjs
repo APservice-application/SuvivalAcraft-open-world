@@ -108,7 +108,25 @@ for (const e of errors.slice(0, 5)) console.log("  ERR:", e.split("\n").slice(0,
 console.log("console.error:", consoleErrors.length);
 for (const e of consoleErrors.slice(0, 3)) console.log("  CE:", String(e).split("\n").slice(0, 3).join("\n  "));
 
-const ok = errors.length === 0 && consoleErrors.length === 0 && (quick?.children.length ?? 0) === 6;
+// --- CP-019 panels: เปิดกระเป๋า + สวมเกราะผ่าน quickUse path ---
+doc.getElementById("btn-inv").click();
+await new Promise((r) => setTimeout(r, 100));
+const overlay = doc.getElementById("panel-overlay");
+const slots = overlay ? overlay.querySelectorAll(".inv-slot").length : -1;
+console.log("");
+console.log("== หลังเปิดกระเป๋า ==");
+console.log("panel เปิด:", overlay?.style.display === "block", "| ช่อง:", slots);
+
+// สวมเกราะ: คราฟต์ hide_armor ไม่ได้ (วัตถุดิบไม่พอ) — จำลองโดยใส่ของลง quickUse ไม่ได้จากภายนอก
+// ใช้การกดปิด panel แล้วเช็ค paused กลับ
+doc.getElementById("panel-close")?.click();
+await new Promise((r) => setTimeout(r, 100));
+console.log("panel ปิดแล้ว:", overlay?.style.display === "none");
+
+const ok = errors.length === 0 && consoleErrors.length === 0
+  && (quick?.children.length ?? 0) === 6
+  && slots === 24
+  && overlay?.style.display === "none";
 console.log("");
 console.log(ok ? "SMOKE PASS ✅" : "SMOKE FAIL ❌");
 process.exit(ok ? 0 : 1);

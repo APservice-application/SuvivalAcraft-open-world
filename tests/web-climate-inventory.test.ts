@@ -120,7 +120,8 @@ describe("defense", () => {
   it("damageAfterDefense subtracts armor with minimum 1", () => {
     const p = newPlayer("t", "#ffffff", 0, 0);
     expect(damageAfterDefense(5, p)).toBe(5);
-    p.equip = null;
+    p.armor = { chest: "hide_armor" };
+    expect(damageAfterDefense(5, p)).toBe(3); // DEF 2
     // simulate armor via a temporary item registration-free path: use existing ITEMS
     // hide_armor is added in a later checkpoint; here we test the pure math via crafted scenario
     const p2 = newPlayer("t2", "#ffffff", 0, 0);

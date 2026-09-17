@@ -92,7 +92,7 @@ describe("new content", () => {
     expect(armor.maxDur).toBeGreaterThan(0);
     const p = newPlayer("t", "#fff", 0, 0);
     expect(equippedDefense(p)).toBe(0);
-    p.equip = "hide_armor";
+    p.armor = { chest: "hide_armor" }; // CP-019: เกราะสวมในช่อง chest
     expect(equippedDefense(p)).toBe(2);
     expect(damageAfterDefense(8, p)).toBe(6);
     expect(damageAfterDefense(2, p)).toBe(1); // min 1

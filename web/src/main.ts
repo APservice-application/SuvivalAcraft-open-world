@@ -3,7 +3,8 @@ import { World, TILE_SIZE, T_WATER, T_STONE, T_ROCK, T_TREE, T_BUSH, T_BERRY, T_
 import {
   PlayerState, newPlayer, addItem, removeItem, countItems, canCraft, craftRecipe,
   useItem, equippedDamage, damageAfterDefense, survivalTick, addXp, xpNeed,
-  ITEMS, RECIPES, Slot,
+  equipArmorFromSlot, unequipArmor, wearArmor, migrateEquipSlots, ARMOR_SLOTS, equippedDefense,
+  ITEMS, RECIPES, Slot, type ArmorSlot,
 } from "./state.js";
 import { buildableByItem, isDoorTile, toggledDoor, itemForBuildingTile, occupiedTile } from "./building.js";
 import { FarmPlots, CROPS, FERT_MULT, cropBySeedItem, plotKey } from "./farming.js";
@@ -13,7 +14,7 @@ import { ambientTemperature, warmthStep } from "./climate.js";
 import { sortSlots, wearSlot } from "./inventory.js";
 import { applyContentPack, packFromStorage } from "./content.js";
 import { ENEMY_KINDS, enemyStats, rollEnemyKind, shouldSpawnBoss } from "./bestiary.js";
-import { QuestLog } from "./quests.js";
+import { QuestLog, QUEST_DEFS } from "./quests.js";
 import { Sfx } from "./audio.js";
 import { iconHTML, iconCanvas } from "./icons.js";
 import { MusicEngine, THEME_STEPS, themeLengthSec } from "./music.js";
@@ -71,6 +72,12 @@ let mpMyName = "";
 let mpMyColor = "#7ce0a0";
 let mpLastIntentDir = { dx: 0, dz: 0 };
 let coopEl: HTMLElement | null = null;
+
+// panels (CP-019: Inventory/Character/Quest — UI-007/008/011)
+let panelEl: HTMLElement | null = null;
+let panelOpenKind: "inv" | "char" | "quest" | null = null;
+let invSelected = -1;
+let questPanelEl: HTMLElement | null = null;
 
 let camX = 0, camY = 0;
 let running = false;
@@ -157,6 +164,30 @@ function buildDynamicUI(): void {
   bannerEl = document.createElement("div");
   bannerEl.style.cssText = "position:absolute;top:calc(max(8px,env(safe-area-inset-top)) + 84px);left:50%;transform:translateX(-50%);background:rgba(10,16,30,.85);border:1px solid rgba(255,213,79,.4);color:#ffd54f;font-size:12px;padding:4px 10px;border-radius:8px;z-index:6;display:none;pointer-events:none;";
   hud.appendChild(bannerEl);
+
+  // left menu (UI_BLUEPRINT หัวข้อ 26: 🎒 👤 📜)
+  const leftMenu = document.createElement("div");
+  leftMenu.style.cssText = "position:absolute;left:10px;top:42%;display:flex;flex-direction:column;gap:6px;z-index:6;";
+  const mk = (id: string, icon: string, tip: string) => {
+    const b = document.createElement("button");
+    b.id = id;
+    b.textContent = icon;
+    b.title = tip;
+    b.style.cssText = "width:44px;height:44px;border-radius:12px;border:1px solid rgba(255,255,255,.3);background:rgba(10,16,30,.8);color:#fff;font-size:20px;";
+    leftMenu.appendChild(b);
+    return b;
+  };
+  mk("btn-inv", "🎒", "กระเป๋า (I)");
+  mk("btn-char", "👤", "ตัวละคร (C)");
+  mk("btn-questpanel", "📜", "ภารกิจ (Q)");
+  hud.appendChild(leftMenu);
+
+  // panel overlay
+  panelEl = document.createElement("div");
+  panelEl.id = "panel-overlay";
+  panelEl.style.cssText = "position:absolute;inset:0;z-index:15;display:none;background:rgba(3,6,12,.72);backdrop-filter:blur(2px);";
+  panelEl.addEventListener("click", (e) => { if (e.target === panelEl) closePanel(); });
+  hud.appendChild(panelEl);
 
   // co-op panel
   coopEl = document.createElement("div");
@@ -279,6 +310,7 @@ function startGame(p: PlayerState, seed: number, t: number, restore?: WorldSaveV
   if (tradeEl) tradeEl.style.display = "none";
   if (restore) {
     if (player.warmth === undefined) player.warmth = 50;
+    migrateEquipSlots(player);
     questLog = new QuestLog();
     if (restore.quests) {
       questLog.progress = { ...restore.quests.progress };
@@ -756,6 +788,9 @@ function updateEnemies(dt: number): void {
           player.hp = Math.max(0, player.hp - damageAfterDefense(e.dmg, player));
           sfx.play("hurt");
           wearEquipped(1);
+          if (player.armor?.chest && wearArmor(player, "chest", 1)) {
+            notify(`🥼 เกราะแตกสลาย!`, "#ff8a80");
+          }
           (e as any).atkTimer = performance.now() / 1000 + 1;
           notify(`${e.kind} โจมตีคุณ! -${e.dmg}`, "#ff8a80");
         }
@@ -902,6 +937,13 @@ function quickUse(slotIdx: number): void {
     useItem(player, slotIdx);
     player.equip = s.item;
     notify(`ถือ ${def.icon} ${def.name}`, "#ffd54f");
+  } else if (def?.category === "armor") {
+    if (equipArmorFromSlot(player, slotIdx)) {
+      sfx.play("craft");
+      notify(`สวม ${def.icon} ${def.name} (DEF +${def.defense ?? 0})`, "#aaf0c2");
+    } else {
+      notify("สวมไม่ได้", "#ff8a80");
+    }
   }
   renderHud();
   renderQuickBar();
@@ -959,7 +1001,8 @@ function useButtonLabel(): string {
   if (s.item === "fertilizer") return `${iconHTML(s.item)}<br/><span style="font-size:9px">ปุ๋ย</span>`;
   const def = ITEMS[s.item];
   if (def?.category === "food") return `${iconHTML(s.item)}<br/><span style="font-size:9px">กิน</span>`;
-  if (def?.category === "tool" || def?.category === "weapon" || def?.category === "armor") return `${iconHTML(s.item)}<br/><span style="font-size:9px">ถือ</span>`;
+  if (def?.category === "tool" || def?.category === "weapon") return `${iconHTML(s.item)}<br/><span style="font-size:9px">ถือ</span>`;
+  if (def?.category === "armor") return `${iconHTML(s.item)}<br/><span style="font-size:9px">สวม</span>`;
   return `${iconHTML(s.item)}<br/><span style="font-size:9px">ใช้</span>`;
 }
 
@@ -1294,6 +1337,180 @@ function closePause(): void {
   paused = false;
   running = true;
   lastTs = performance.now();
+}
+
+// ============================================================
+//  PANELS (CP-019) — Inventory / Character / Quest
+// ============================================================
+function openPanel(kind: "inv" | "char" | "quest"): void {
+  if (!player) return;
+  panelOpenKind = kind;
+  invSelected = -1;
+  if (panelEl) panelEl.style.display = "block";
+  paused = true;
+  renderPanel();
+  sfx.play("click");
+}
+
+function closePanel(): void {
+  panelOpenKind = null;
+  if (panelEl) panelEl.style.display = "none";
+  paused = false;
+  lastTs = performance.now();
+  renderQuickBar();
+}
+
+function durBar(dur: number | undefined, max: number | undefined): string {
+  if (dur === undefined || !max) return "";
+  const pct = Math.max(0, Math.min(100, Math.round((dur / max) * 100)));
+  const col = pct > 50 ? "#7ce07c" : pct > 20 ? "#ffd54f" : "#e05353";
+  return `<div style="height:3px;background:#14203a;border-radius:2px;margin-top:2px"><div style="height:100%;width:${pct}%;background:${col}"></div></div>`;
+}
+
+function renderPanel(): void {
+  if (!panelEl || !player || !panelOpenKind) return;
+  const titles = { inv: "🎒 กระเป๋า", char: "👤 ตัวละคร", quest: "📜 ภารกิจ" } as const;
+  let body = "";
+  if (panelOpenKind === "inv") body = renderInvBody();
+  else if (panelOpenKind === "char") body = renderCharBody();
+  else body = renderQuestBody();
+  panelEl.innerHTML = `
+    <div class="panel-card">
+      <div class="panel-head">
+        <b>${titles[panelOpenKind]}</b>
+        <span class="panel-chips">🪙 ${player.gold}</span>
+        <button id="panel-close" style="margin-left:auto">✕</button>
+      </div>
+      <div class="panel-body">${body}</div>
+    </div>`;
+  document.getElementById("panel-close")?.addEventListener("click", closePanel);
+  wirePanelEvents();
+}
+
+function slotHTML(i: number, sl: Slot | undefined): string {
+  if (!sl) return `<div class="inv-slot" data-idx="${i}"></div>`;
+  const def = ITEMS[sl.item];
+  const sel = i === invSelected ? " sel" : "";
+  const durTxt = sl.dur !== undefined && def?.maxDur ? durBar(sl.dur, def.maxDur) : "";
+  return `<div class="inv-slot${sel}" data-idx="${i}">${iconHTML(sl.item)}<span class="cnt">${sl.count > 1 || def?.maxDur ? String(sl.count) : ""}</span>${durTxt}</div>`;
+}
+
+function renderInvBody(): string {
+  let cells = "";
+  for (let i = 0; i < 24; i++) cells += slotHTML(i, player!.inv[i]);
+  const sl = invSelected >= 0 ? player!.inv[invSelected] : undefined;
+  let actions = `<button class="pbtn" id="p-sort">↕ เรียง</button>`;
+  if (sl) {
+    const def = ITEMS[sl.item];
+    const label = def?.category === "armor" ? "สวม" : (def?.category === "tool" || def?.category === "weapon") ? "ถือ" : def?.category === "food" ? "กิน" : "ใช้";
+    const usable = ["armor", "tool", "weapon", "food"].includes(def?.category ?? "");
+    actions = `
+      ${usable ? `<button class="pbtn primary" id="p-use">${label}</button>` : ""}
+      <button class="pbtn danger" id="p-drop">ทิ้ง</button>
+      <span style="flex:1;font-size:12px;color:#9fb0d8;align-self:center">${def?.name ?? ""} ${def?.defense ? `DEF+${def.defense}` : ""} ${def?.damage && def.category !== "tool" ? `ATK+${def.damage}` : ""}</span>` + actions;
+  }
+  return `<div class="inv-grid">${cells}</div>
+    <div class="panel-row" style="margin-top:10px">
+      <span style="font-size:12px;color:#9fb0d8;align-self:center">ATK ${equippedDamage(player!)} · DEF ${equippedDefense(player!)} · ${player!.inv.length}/24</span>
+      <span style="flex:1"></span>${actions}
+    </div>`;
+}
+
+function renderCharBody(): string {
+  const p = player!;
+  const bar = (label: string, cur: number, max: number, color: string) => `
+    <div style="margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:#9fb0d8"><span>${label}</span><span>${Math.ceil(cur)}/${Math.round(max)}</span></div>
+      <div style="height:7px;background:#14203a;border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.max(0, Math.min(100, (cur / max) * 100))}%;background:${color}"></div></div>
+    </div>`;
+  const eqBox = (slot: string, item?: string, dur?: number) => {
+    const def = item ? ITEMS[item] : undefined;
+    return `<div class="eq-box" data-eq="${slot}" title="แตะเพื่อถอด">${item ? `${iconHTML(item)}<span style="font-size:10px;color:#9fb0d8">${def?.name ?? ""}</span>${durBar(dur, def?.maxDur)}` : `<span style="font-size:16px;opacity:.4">${slot === "hand" ? "✋" : slot === "head" ? "🎩" : slot === "chest" ? "👕" : slot === "legs" ? "👖" : "🧿"}</span>`}</div>`;
+  };
+  return `
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div style="width:44px;height:44px;border-radius:10px;background:${p.outfit};border:2px solid #fff3"></div>
+          <div><b>${escapeHtml(p.name)}</b><div style="font-size:12px;color:#9fb0d8">Lv.${p.level} · XP ${p.xp}/${xpNeed(p)}</div></div>
+        </div>
+        ${bar("❤️ HP", p.hp, p.maxHp, "#e05353")}
+        ${bar("🍖 หิว", p.hunger, p.maxHunger, "#d9a13c")}
+        ${bar("🌡 ความอบอุ่น", p.warmth ?? 50, 100, "#5fb8e0")}
+        ${bar("⚡ Stamina", p.stamina, p.maxStamina, "#7ce07c")}
+        <div style="font-size:13px;margin-top:6px">ATK <b>${equippedDamage(p)}</b> · DEF <b>${equippedDefense(p)}</b> · 🪙 <b>${p.gold}</b></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,86px);gap:6px;align-content:start">
+        ${eqBox("hand", p.equip ?? undefined, undefined)}
+        ${eqBox("head", p.armor?.head, p.armorDur?.head)}
+        ${eqBox("chest", p.armor?.chest, p.armorDur?.chest)}
+        ${eqBox("legs", p.armor?.legs, p.armorDur?.legs)}
+        ${eqBox("acc", p.armor?.acc, p.armorDur?.acc)}
+        <div style="font-size:10px;color:#7f8db0;align-self:center">แตะเพื่อถอด</div>
+      </div>
+    </div>`;
+}
+
+function renderQuestBody(): string {
+  let html = "";
+  for (const q of QUEST_DEFS) {
+    const done = questLog.done[q.id];
+    const locked = !done && !questLog.active().some((a) => a.id === q.id);
+    const prog = questLog.progress[q.id] ?? 0;
+    const state = done ? '<span style="color:#7ce07c">✅ สำเร็จ</span>' : locked ? '<span style="color:#7f8db0">🔒 ล็อก</span>' : `<span style="color:#8fb0ff">${prog}/${q.target}</span>`;
+    const pct = done ? 100 : Math.min(100, Math.round((prog / q.target) * 100));
+    html += `<div class="qrow ${done ? "done" : locked ? "locked" : ""}">
+      <div style="display:flex;justify-content:space-between"><b>${q.icon} ${q.name}</b>${state}</div>
+      <div style="font-size:11px;color:#9fb0d8">${q.desc} · รางวัล +${q.rewardXp} XP${q.rewardGold ? ` +${q.rewardGold} 🪙` : ""}</div>
+      <div style="height:4px;background:#14203a;border-radius:2px;margin-top:4px"><div style="height:100%;width:${pct}%;background:#8fb0ff"></div></div>
+    </div>`;
+  }
+  return html;
+}
+
+function wirePanelEvents(): void {
+  if (!panelEl) return;
+  panelEl.querySelectorAll<HTMLElement>(".inv-slot").forEach((el) => {
+    el.addEventListener("click", () => {
+      const i = Number(el.dataset.idx);
+      invSelected = player!.inv[i] ? i : -1;
+      renderPanel();
+    });
+  });
+  const useBtn = document.getElementById("p-use");
+  if (useBtn) useBtn.addEventListener("click", () => {
+    if (invSelected < 0 || !player) return;
+    const def = ITEMS[player.inv[invSelected]!.item];
+    if (def?.category === "armor") equipArmorFromSlot(player, invSelected);
+    else quickUse(invSelected);
+    renderPanel(); renderQuickBar(); renderHud();
+  });
+  const dropBtn = document.getElementById("p-drop");
+  if (dropBtn) dropBtn.addEventListener("click", () => {
+    if (invSelected < 0 || !player) return;
+    const it = player.inv[invSelected]!.item;
+    removeItem(player, it, 1);
+    if (!player.inv[invSelected]) invSelected = -1;
+    renderPanel(); renderQuickBar(); renderHud();
+  });
+  const sortBtn = document.getElementById("p-sort");
+  if (sortBtn) sortBtn.addEventListener("click", () => {
+    player!.inv = sortSlots(player!.inv);
+    invSelected = -1;
+    renderPanel(); renderQuickBar();
+  });
+  panelEl.querySelectorAll<HTMLElement>(".eq-box").forEach((el) => {
+    el.addEventListener("click", () => {
+      const slot = el.dataset.eq as ArmorSlot | "hand";
+      if (!player) return;
+      if (slot === "hand") {
+        if (player.equip) { player.equip = null; notify("วางอาวุธลง", "#9fb0d8"); }
+      } else if (slot && ARMOR_SLOTS.includes(slot)) {
+        if (unequipArmor(player, slot)) notify("ถอดแล้ว", "#9fb0d8");
+      }
+      renderPanel(); renderQuickBar(); renderHud();
+    });
+  });
 }
 
 // ============================================================
@@ -1666,6 +1883,19 @@ async function init(): Promise<void> {
   });
   $("btn-settings").addEventListener("click", () => notify("ตั้งค่าอยู่ระหว่างพัฒนา", "#ffd54f"));
   $("btn-credits").addEventListener("click", () => notify("🧭 SuvivalCraft — ส่วนหนึ่งของ SuvivalAcraft", "#9fb0d8"));
+
+  // panels
+  $("btn-inv").addEventListener("click", () => openPanel("inv"));
+  $("btn-char").addEventListener("click", () => openPanel("char"));
+  $("btn-questpanel").addEventListener("click", () => openPanel("quest"));
+  addEventListener("keydown", (e) => {
+    if (!player || !running) return;
+    const k = e.key.toLowerCase();
+    if (k === "i") { panelOpenKind === "inv" ? closePanel() : openPanel("inv"); }
+    else if (k === "c") { panelOpenKind === "char" ? closePanel() : openPanel("char"); }
+    else if (k === "q") { panelOpenKind === "quest" ? closePanel() : openPanel("quest"); }
+    else if (k === "escape" && panelOpenKind) closePanel();
+  });
 
   // co-op screen
   $("btn-coop").addEventListener("click", () => { showScreen("screen-coop"); });

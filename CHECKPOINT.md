@@ -245,3 +245,9 @@ Root cause: init() เรียก renderHud() ตอน player ยัง undefi
 Fix: (1) renderHud guard !player (2) loop ครอบ try/catch — error รายเฟรม log ครั้งเดียวแล้วเล่นต่อ ไม่ตายทั้งเกม (3) เพิ่ม scripts/smoke.mjs (jsdom headless boot: เริ่มเกม→loop 2.5s→เดิน→โจมตี ต้องไม่มี error + quickbar 6 slot) เป็น npm run test:smoke + เข้า CI
 Evidence: smoke PASS ✅ (0 errors, quickbar 6, hud ปกติ); npm test 152/152; check PASS; web typecheck PASS; vite build PASS
 Commit: (commit ถัดจาก BUG-002)
+
+## CP-019
+Task: UI-007/008/009 Equipment slots + Panels (Inventory/Character/Quest) — ตาม UI_BLUEPRINT
+Status: DONE
+Evidence: state.ts (ItemDef.slot, PlayerState.armor+armorDur, equipArmorFromSlot/unequipArmor/wearArmor/migrateEquipSlots, equippedDefense รวมทุกช่อง, ไอเทม hide_helm/hide_pants/bone_charm/bone + สูตร 3 ใหม่) + main.ts (สวมเกราะจาก quickbar, เกราะอกสึกเมื่อโดนตี, migration เซฟเก่า equip=เกราะ→chest, เมนูซ้าย 🎒👤📜 + panel overlay: กระเป๋า 24 ช่องแตะ=ใช้/สวม/ทิ้ง/เรียง, หน้าตัวละคร bar 4 ค่า + ช่องสวม 5 แตะถอดได้, รายการเควสครบทุกสถานะ, คีย์ลัด I/C/Q/Esc) + index.html (panel CSS + จอเตี้ย); icons เพิ่ม 4 ชิ้น; tests/web-equipment.test.ts (9 tests) + แก้ test เดิม 2 จุด; suite 161/161 PASS; smoke PASS (panel เปิด 24 slot ปิดกลับ paused=false); check + web typecheck + vite build PASS
+Commit: (commit ถัดจาก CP-019)

@@ -75,6 +75,27 @@
       #overlay { position: absolute; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.6); }
       #overlay.visible { display: flex; }
 
+      /* ---- PANELS (inventory/character/quest) ---- */
+      .panel-card { margin: auto; width: min(94vw, 640px); max-height: 92vh; display: flex; flex-direction: column; background: rgba(10,16,30,.97); border: 1px solid rgba(143,176,255,.35); border-radius: 16px; padding: 14px; box-shadow: 0 18px 50px rgba(0,0,0,.6); }
+      .panel-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 16px; color: #8fb0ff; }
+      .panel-chips { font-size: 13px; color: #ffd54f; background: rgba(255,213,79,.1); border: 1px solid rgba(255,213,79,.3); padding: 2px 8px; border-radius: 8px; }
+      .panel-head button { border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.08); color: #fff; border-radius: 8px; width: 32px; height: 32px; font-size: 14px; }
+      .panel-body { overflow-y: auto; min-height: 0; }
+      .inv-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+      .inv-slot { aspect-ratio: 1; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14); border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 18px; padding: 4px; cursor: pointer; min-width: 0; }
+      .inv-slot.sel { border-color: #8fb0ff; background: rgba(143,176,255,.18); }
+      .inv-slot .cnt { font-size: 10px; color: #fff; line-height: 1; }
+      .inv-slot div { width: 100%; }
+      .panel-row { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+      .pbtn { border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.08); color: #ecf0ff; border-radius: 10px; padding: 8px 14px; font-size: 13px; font-weight: 700; }
+      .pbtn.primary { background: rgba(87,124,255,.35); border-color: rgba(143,176,255,.6); }
+      .pbtn.danger { background: rgba(160,40,40,.4); border-color: rgba(224,83,83,.5); }
+      .qrow { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; font-size: 13px; color: #ecf0ff; }
+      .qrow.done { opacity: .6; }
+      .qrow.locked { opacity: .45; }
+      .eq-box { min-height: 64px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.16); border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 18px; padding: 4px; cursor: pointer; text-align: center; }
+      .eq-box div { width: 100%; }
+
       /* ---- จอเตี้ย (มือถือแนวนอน): ย่อ card ให้เห็นปุ่มเริ่มเกมโดยไม่ต้องเลื่อน ---- */
       @media (max-height: 500px) and (orientation: landscape) {
         .menu-card { padding: 12px 18px; border-radius: 14px; }
@@ -90,6 +111,12 @@
         #worlds-list { max-height: 38vh; gap: 6px; margin: 8px 0; }
         .world-row { padding: 7px 10px; }
         .world-play, .world-del { padding: 7px 10px; font-size: 12px; }
+        .panel-card { padding: 10px; max-height: 94vh; }
+        .inv-grid { gap: 4px; }
+        .inv-slot { border-radius: 8px; font-size: 15px; }
+        .eq-box { min-height: 52px; }
+        .qrow { padding: 6px 8px; font-size: 12px; }
+        .pbtn { padding: 6px 10px; font-size: 12px; }
       }
 
       /* ---- LANDSCAPE LOCK ---- */

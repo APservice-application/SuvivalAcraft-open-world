@@ -8,6 +8,8 @@ export interface ItemDef {
   damage?: number;
   /** ลดดาเมจที่ได้รับ (เกราะ) */
   defense?: number;
+  /** ช่องสวมของเกราะ (งาน CP-019 equipment slots) */
+  slot?: "head" | "chest" | "legs" | "acc";
   tool?: "axe" | "pickaxe" | "knife";
   /** ความทนทานสูงสุด (งานที่ 07) — ของที่มี maxDur จะมี slot.dur ติดตาม */
   maxDur?: number;
@@ -39,7 +41,11 @@ export const ITEMS: Record<string, ItemDef> = {
   fertilizer: { id: "fertilizer", name: "ปุ๋ย", category: "misc", icon: "✨", stack: 20 },
   // เนื้อหาใหม่ (CP-010)
   hide: { id: "hide", name: "หนังสัตว์", category: "resource", icon: "🟫", stack: 30 },
-  hide_armor: { id: "hide_armor", name: "เสื้อหนัง", category: "armor", icon: "🥼", stack: 1, defense: 2, maxDur: 80 },
+  bone: { id: "bone", name: "กระดูก", category: "resource", icon: "🦴", stack: 30 },
+  hide_armor: { id: "hide_armor", name: "เสื้อหนัง", category: "armor", icon: "🥼", stack: 1, defense: 2, maxDur: 80, slot: "chest" },
+  hide_helm: { id: "hide_helm", name: "หมวกหนัง", category: "armor", icon: "🪖", stack: 1, defense: 1, maxDur: 40, slot: "head" },
+  hide_pants: { id: "hide_pants", name: "กางเกงหนัง", category: "armor", icon: "👖", stack: 1, defense: 1, maxDur: 50, slot: "legs" },
+  bone_charm: { id: "bone_charm", name: "เครื่องรางกระดูก", category: "armor", icon: "🧿", stack: 1, defense: 1, maxDur: 60, slot: "acc" },
 };
 
 export interface Slot { item: string; count: number; /** ความทนทานคงเหลือ (เฉพาะของที่มี maxDur) */ dur?: number; }
@@ -66,6 +72,9 @@ export const RECIPES: Recipe[] = [
   { id: "door", name: "ประตูไม้", icon: "🚪", out: { item: "door", count: 1 }, needs: [{ item: "wood", count: 4 }] },
   { id: "campfire", name: "แคมป์ไฟ", icon: "🔥", out: { item: "campfire", count: 1 }, needs: [{ item: "wood", count: 3 }, { item: "stone", count: 2 }] },
   { id: "hide_armor", name: "เสื้อหนัง", icon: "🥼", out: { item: "hide_armor", count: 1 }, needs: [{ item: "hide", count: 4 }, { item: "fiber", count: 2 }] },
+  { id: "hide_helm", name: "หมวกหนัง", icon: "🪖", out: { item: "hide_helm", count: 1 }, needs: [{ item: "hide", count: 2 }, { item: "fiber", count: 1 }] },
+  { id: "hide_pants", name: "กางเกงหนัง", icon: "👖", out: { item: "hide_pants", count: 1 }, needs: [{ item: "hide", count: 3 }, { item: "fiber", count: 1 }] },
+  { id: "bone_charm", name: "เครื่องรางกระดูก", icon: "🧿", out: { item: "bone_charm", count: 1 }, needs: [{ item: "bone", count: 2 }, { item: "fiber", count: 2 }] },
   { id: "fertilizer", name: "ปุ๋ย", icon: "✨", out: { item: "fertilizer", count: 2 }, needs: [{ item: "fiber", count: 2 }, { item: "berry", count: 1 }] },
 ];
 
@@ -85,7 +94,12 @@ export interface PlayerState {
   gold: number;
   pos: { x: number; y: number };
   inv: Slot[];
+  /** อาวุธ/เครื่องมือที่ถือ (มือหลัก) */
   equip: string | null;
+  /** ชุดเกราะที่สวม (CP-019 equipment slots) */
+  armor: { head?: string; chest?: string; legs?: string; acc?: string };
+  /** ความทนทานคงเหลือของเกราะแต่ละช่อง */
+  armorDur: { head?: number; chest?: number; legs?: number; acc?: number };
 }
 
 export function newPlayer(name: string, outfit: string, x: number, y: number): PlayerState {
@@ -109,7 +123,68 @@ export function newPlayer(name: string, outfit: string, x: number, y: number): P
       { item: "berry", count: 5 },
     ],
     equip: null,
+    armor: {},
+    armorDur: {},
   };
+}
+
+export const ARMOR_SLOTS = ["head", "chest", "legs", "acc"] as const;
+export type ArmorSlot = (typeof ARMOR_SLOTS)[number];
+
+/** สวมของลงช่องเกราะ (สลับกับของเดิมอัตโนมัติ) — คืน true ถ้าสำเร็จ */
+export function equipArmorFromSlot(p: PlayerState, invIndex: number): boolean {
+  const s2 = p.inv[invIndex];
+  if (!s2) return false;
+  const def = ITEMS[s2.item];
+  if (!def || def.category !== "armor" || !def.slot) return false;
+  if (!removeItem(p, s2.item, 1)) return false;
+  const slot: ArmorSlot = def.slot;
+  // ถอดของเดิมคืน inventory (ถ้ามี)
+  const old = p.armor[slot];
+  if (old) {
+    if (p.inv.length >= 24) { addItem(p, s2.item, 1); return false; } // ไม่มีที่วางของเดิม — คืนของใหม่
+    p.inv.push({ item: old, count: 1, dur: p.armorDur[slot] });
+  }
+  p.armor[slot] = s2.item;
+  p.armorDur[slot] = s2.dur ?? def.maxDur;
+  return true;
+}
+
+/** ถอดเกราะจากช่อง — คืนของ (พร้อม dur) เข้า inventory */
+export function unequipArmor(p: PlayerState, slot: ArmorSlot): boolean {
+  const item = p.armor[slot];
+  if (!item) return false;
+  if (p.inv.length >= 24) return false;
+  p.inv.push({ item, count: 1, dur: p.armorDur[slot] ?? ITEMS[item]?.maxDur });
+  delete p.armor[slot];
+  delete p.armorDur[slot];
+  return true;
+}
+
+/** สึกของเกราะช่องที่ระบุ; แตกสลายเมื่อหมด (คืน true ถ้าแตก) */
+export function wearArmor(p: PlayerState, slot: ArmorSlot, amount = 1): boolean {
+  const item = p.armor[slot];
+  if (!item) return false;
+  const cur = p.armorDur[slot] ?? ITEMS[item]?.maxDur ?? 1;
+  const left = Math.max(0, cur - amount);
+  if (left <= 0) {
+    delete p.armor[slot];
+    delete p.armorDur[slot];
+    return true;
+  }
+  p.armorDur[slot] = left;
+  return false;
+}
+
+/** แปลงเซฟเก่า: equip ที่เป็นเกราะ → ย้ายไป armor.chest */
+export function migrateEquipSlots(p: PlayerState): void {
+  if (!p.armor) p.armor = {};
+  if (!p.armorDur) p.armorDur = {};
+  if (p.equip && ITEMS[p.equip]?.category === "armor") {
+    const slot = ITEMS[p.equip]!.slot ?? "chest";
+    if (!p.armor[slot]) p.armor[slot] = p.equip;
+    p.equip = null;
+  }
 }
 
 export function addItem(p: PlayerState, item: string, count: number): void {
@@ -186,10 +261,19 @@ export function equippedDamage(p: PlayerState): number {
   return 1;
 }
 
-/** พลังป้องกันจากเกราะที่สวมอยู่ (งานเนื้อหาใหม่) */
+/** พลังป้องกันรวมจากเกราะทุกช่องที่สวม (CP-019) */
 export function equippedDefense(p: PlayerState): number {
-  if (p.equip && ITEMS[p.equip]) return ITEMS[p.equip]!.defense ?? 0;
-  return 0;
+  let d = 0;
+  for (const slot of ARMOR_SLOTS) {
+    const it = p.armor?.[slot];
+    if (it && ITEMS[it]) d += ITEMS[it]!.defense ?? 0;
+  }
+  return d;
+}
+
+/** อาวุธในมือ */
+export function equippedHand(p: PlayerState): string | null {
+  return p.equip;
 }
 
 /** คำนวณดาเมจที่ได้รับหลังหักเกราะ (ขั้นต่ำ 1) */
