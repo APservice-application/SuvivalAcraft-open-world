@@ -31,18 +31,18 @@ Engine แยกออกจาก Renderer (game/ = logic Engine, web/ = Render
 | 11 | Combat (weapon stats/damage/armor/crit) | DONE | master |
 | 12 | Day/Night (cycle + visibility/temperature/creature activity) | DONE | master |
 | 13 | Weather (clear/rain/storm/fog + gameplay effect) | DONE | master |
-| 14 | World Events (migration/storm/wildfire/merchant/camp...) | PENDING | master |
-| 15 | Local Save (IndexedDB/PWA) + Save Migration (version) | PENDING | master |
-| 16 | LAN Multiplayer (host-authoritative) | PENDING | master |
-| 17 | Update Content System (engine/content pack) | PENDING | master |
+| 14 | World Events (migration/storm/wildfire/merchant/camp...) | DONE | Arena Agent |
+| 15 | Local Save (IndexedDB/PWA) + Save Migration (version) | DONE | Arena Agent |
+| 16 | LAN Multiplayer (host-authoritative) | DONE (local co-op, transport pluggable) | Arena Agent |
+| 17 | Update Content System (engine/content pack) | DONE | Arena Agent |
 
 ---
 
 # CURRENT WORK
 
-Task: เคลียร์ REMAINING ทั้งหมด — 14 World Events / 06 Temperature / 07 Durability+sort / 17 Content Pack + content ใหม่ / Farming ขยาย / Quest chain+explore / Audio / 16 LAN / CI
-Owner: Arena Agent
-Status: IN_PROGRESS (claimed 2026-09-17 รอบ 2) — ทำเป็น CP-008..CP-014 ทีละ checkpoint
+Task: (ว่าง — MASTER TASK LIST ครบ 17/17 แล้ว)
+Owner: -
+Status: AVAILABLE
 
 ---
 
@@ -68,30 +68,39 @@ Status: IN_PROGRESS (claimed 2026-09-17 รอบ 2) — ทำเป็น CP-0
 - [x] 10 Creature AI — `game/src/ai/` state machine: IDLE/WANDER/SENSE/SEARCH/CHASE/ATTACK/FLEE/RETURN + Creature entity
 - [x] 12 Day/Night — `game/src/world/daynight.ts` (DAWN/DAY/EVENING/NIGHT + light curve + day counter)
 - [x] 13 Weather — `game/src/world/weather.ts` (clear/rain/heavy_rain/storm/fog/heat/cold + effects + scheduler)
-- [ ] 14 World Events — events เปลี่ยน World State จริง
-- [ ] 15 Local Save — IndexedDB (web) + version migration
-- [ ] 16 LAN Multiplayer — host-authoritative
-- [ ] 17 Content Update — engine กับ content pack แยก
-- [ ] 06 Temperature ต่อ survival
-- [ ] 07 Inventory durability/metadata
+- [x] 14 World Events — CP-008 (migration/storm/wildfire/merchant/camp + trade)
+- [x] 15 Local Save — CP-007 (IndexedDB multi-world + migration v1→v2)
+- [x] 16 LAN Multiplayer — CP-013 (host-authoritative local co-op)
+- [x] 17 Content Update — CP-010 (content pack + bestiary)
+- [x] 06 Temperature — CP-009 (warmth + ambient ตามเวลา/สภาพอากาศ)
+- [x] 07 Inventory durability/metadata — CP-009 (+ sort)
 
 ---
 
 # LAST COMPLETED
 
-CP-013 Co-op Local Multiplayer (16) — host-authoritative (ก่อนหน้า: CP-012 Quest chain+Audio)
+CP-014 CI + ปิดงานเอกสาร (MASTER TASK LIST 17/17 DONE) (ก่อนหน้า: CP-013 Co-op)
 
 ---
 
 # NEXT ACTION
 
-ตัวเลือกถัดไป: 14 World Events / 16 LAN Multiplayer / เพิ่ม content (อ้างงาน REMAINING ด้านล่าง)
+(ไม่มีงานค้างใน MASTER TASK LIST) — งาน future (ตาม RULE 18 DISCOVERED): item icon ศิลป์จริง, WebRTC transport ข้ามเครื่อง, world-effect sync ใน co-op, ไฟล์เสียงเพลงจริง
 
 ---
 
 # BLOCKERS
 
 None
+
+---
+
+# FUTURE / DISCOVERED (นอก scope ปัจจุบัน — ทำต่อได้เมื่อสั่ง)
+
+- [ ] item icons ศิลป์จริง (ตอนนี้ใช้ emoji)
+- [ ] WebRTC/WebSocket transport สำหรับ co-op ข้ามเครื่อง (protocol พร้อม)
+- [ ] world-effect sync ใน co-op (ตอนนี้ตำแหน่ง/presence authoritative, เอฟเฟกต์โลกยัง local)
+- [ ] เพลง/ไฟล์เสียงจริง (ตอนนี้ SFX สังเคราะห์ WebAudio)
 
 ---
 
@@ -190,3 +199,9 @@ Task: 16 LAN/Local Multiplayer (host-authoritative)
 Status: DONE (scope: local co-op ข้ามแท็บผ่าน BroadcastChannel; Transport เป็น interface — ต่อ WebRTC/WebSocket ข้ามเครื่องได้ภายหลังโดยไม่แก้ protocol)
 Evidence: web/src/multiplayer.ts (protocol join/welcome/action/snapshot/leave + HostSession ตรวจ intent + rate-limit 12/s + chained action log cap 200 + integrate เดินด้วย MP_SPEED + GuestSession reconcile > 2 tiles + makeRoomCode + Loopback/BroadcastChannel Transport) + main.ts (หน้า Co-op เปิดห้อง/เข้าร่วม, ghost players พร้อมชื่อ, ส่ง move intent 10Hz, พาเนลสถานะห้อง) + index.html (screen-coop); tests/web-multiplayer.test.ts (8 tests); suite 141/141 PASS; check PASS; web typecheck PASS; vite build PASS
 Commit: (commit ถัดจาก CP-013)
+
+## CP-014
+Task: CI (GitHub Actions) + ปิดงานเอกสาร
+Status: DONE
+Evidence: .github/workflows/ci.yml (check + web typecheck + tests + content:validate + build ทุก push/PR) + STATUS.md/CHECKPOINT.md อัปเดตครบ (MASTER TASK LIST 17/17); suite 141/141 PASS ณ commit นี้
+Commit: (commit ถัดจาก CP-014)
