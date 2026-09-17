@@ -159,3 +159,41 @@ describe("HostSession + GuestSession over loopback", () => {
     expect(guest.joined).toBe(false);
   });
 });
+
+describe("world-effect sync (CP-015)", () => {
+  it("host broadcasts world state with snapshot; guest reads enemies/event/merchant", async () => {
+    const [hostT, guestT] = LoopbackTransport.pair();
+    const host = new HostSession("WLD", "h1", me, hostT);
+    const guest = new GuestSession("WLD", "g1", "g", "#0f0", guestT);
+    guest.join();
+    await vi.waitFor(() => expect(guest.joined).toBe(true));
+    host.setWorld({
+      enemies: [{ x: 5, z: 6, kind: "slime_king", hp: 80, maxHp: 90 }],
+      pickups: [{ x: 1, z: 2, item: "gold" }],
+      event: { kind: "storm", endsIn: 12 },
+      merchant: { x: 40, z: 41 },
+    });
+    host.tick(0, 0); // force broadcast
+    await vi.waitFor(() => {
+      expect(guest.world.enemies.length).toBe(1);
+      expect(guest.world.enemies[0]!.kind).toBe("slime_king");
+      expect(guest.world.pickups[0]!.item).toBe("gold");
+      expect(guest.world.event?.kind).toBe("storm");
+      expect(guest.world.merchant?.x).toBe(40);
+    });
+    // clear -> guest sees empty after next snapshot
+    host.setWorld({ enemies: [], pickups: [] });
+    host.tick(0, 0);
+    await vi.waitFor(() => expect(guest.world.enemies.length).toBe(0));
+  });
+
+  it("guest without world field (legacy snapshot) keeps defaults", async () => {
+    const [hostT, guestT] = LoopbackTransport.pair();
+    const host = new HostSession("LEG", "h1", me, hostT);
+    const guest = new GuestSession("LEG", "g1", "g", "#0f0", guestT);
+    guest.join();
+    await vi.waitFor(() => expect(guest.joined).toBe(true));
+    expect(guest.world.enemies).toEqual([]);
+    expect(guest.world.event).toBeUndefined();
+  });
+});

@@ -20,7 +20,7 @@ export const EVENT_DEFS: EventDef[] = [
 ];
 
 export function eventDef(kind: EventKind): EventDef {
-  return EVENT_DEFS.find((d) => d.kind === kind)!;
+  return EVENT_DEFS.find((d) => d.kind === kind) ?? EVENT_DEFS[0]!;
 }
 
 export interface ActiveEvent { kind: EventKind; startsAt: number; endsAt: number; }

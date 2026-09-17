@@ -577,6 +577,28 @@ function render(): void {
     ctx.fillText(pk.item === "gold" ? "🪙" : (ITEMS[pk.item]?.icon ?? "📦"), ps.sx + 3, ps.sy + 12);
   }
 
+  // co-op: host world enemies (guest sees host-authoritative hostiles, tinted)
+  if (mpGuest && mpGuest.joined) {
+    for (const we of mpGuest.world.enemies) {
+      const ws2 = worldToScreen(we.x, we.z);
+      const st2 = enemyStats(we.kind);
+      const sz2 = st2.size;
+      const ox2 = (16 - sz2) / 2;
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = "#d97878";
+      ctx.fillRect(ws2.sx + ox2, ws2.sy + ox2, sz2, sz2);
+      ctx.globalAlpha = 1;
+    }
+    const wm = mpGuest.world.merchant;
+    if (wm) {
+      const wms = worldToScreen(wm.x, wm.z);
+      ctx.globalAlpha = 0.7;
+      ctx.font = "9px monospace";
+      ctx.fillText("💰", wms.sx + 4, wms.sy + 12);
+      ctx.globalAlpha = 1;
+    }
+  }
+
   // co-op ghosts
   for (const gp of mpOthers()) {
     const gs = worldToScreen(gp.x, gp.z);
@@ -1030,6 +1052,12 @@ function updateEvents(dt: number): void {
 
   // event banner countdown
   if (bannerEl) {
+    const ga = mpGuest && mpGuest.joined ? mpGuest.world.event : undefined;
+    if (ga) {
+      const def2 = eventDef(ga.kind as EventKind);
+      bannerEl.textContent = `${def2.icon} ${def2.name} · ${Math.max(0, Math.ceil(ga.endsIn))}s`;
+      bannerEl.style.display = "";
+    }
     const a = eventSched.active;
     if (a && gameSeconds < a.endsAt) {
       const def = eventDef(a.kind);
@@ -1428,6 +1456,13 @@ function update(dt: number): void {
   // co-op sync
   if (mpHost) {
     mpHost.updateSelf(player.pos.x, player.pos.y, player.hp, player.level);
+    const ev = eventSched.active;
+    mpHost.setWorld({
+      enemies: enemies.map((e) => ({ x: e.x, z: e.y, kind: e.kind, hp: e.hp, maxHp: e.maxHp })),
+      pickups: pickups.map((pk) => ({ x: pk.x, z: pk.z, item: pk.item })),
+      event: ev ? { kind: ev.kind, endsIn: Math.max(0, ev.endsAt - gameSeconds) } : undefined,
+      merchant: merchant ? { x: merchant.x, z: merchant.z } : null,
+    });
     mpHost.tick(dt);
     if (Math.random() < 0.02) renderCoop();
   } else if (mpGuest) {

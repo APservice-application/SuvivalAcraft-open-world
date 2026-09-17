@@ -27,11 +27,21 @@ export type MpAction =
   | { t: "place"; item: string }
   | { t: "attack" };
 
+/** สถานะโลกฝั่งโฮสต์ (CP-015 world-effect sync) */
+export interface MpWorldEnemy { x: number; z: number; kind: string; hp: number; maxHp: number; }
+export interface MpWorldPickup { x: number; z: number; item: string; }
+export interface MpWorldState {
+  enemies: MpWorldEnemy[];
+  pickups: MpWorldPickup[];
+  event?: { kind: string; endsIn: number };
+  merchant?: { x: number; z: number } | null;
+}
+
 export type MpMsg =
   | { m: "join"; room: string; id: string; name: string; color: string }
   | { m: "welcome"; room: string; hostId: string; players: MpPlayerState[] }
   | { m: "action"; room: string; id: string; seq: number; action: MpAction }
-  | { m: "snapshot"; room: string; players: MpPlayerState[] }
+  | { m: "snapshot"; room: string; players: MpPlayerState[]; world?: MpWorldState }
   | { m: "leave"; room: string; id: string };
 
 export interface Transport {
@@ -174,11 +184,21 @@ export class HostSession {
     this.snapTimer += dt;
     if (this.snapTimer >= broadcastEvery) {
       this.snapTimer = 0;
-      this.transport.send({ m: "snapshot", room: this.room, players: this.playerList() });
+      this.transport.send({ m: "snapshot", room: this.room, players: this.playerList(), world: this.world });
     }
   }
 
   private snapTimer = 0;
+  private world: MpWorldState = { enemies: [], pickups: [] };
+
+  /** อัปเดตสถานะโลกที่จะ broadcast ไปพร้อม snapshot (เรียกจากเกมจริงทุก tick) */
+  setWorld(world: MpWorldState): void {
+    this.world = world;
+  }
+
+  get worldState(): MpWorldState {
+    return this.world;
+  }
 
   playerList(): MpPlayerState[] {
     return [...this.players.values()].map((p) => ({
@@ -251,6 +271,7 @@ export class GuestSession {
   readonly id: string;
   readonly room: string;
   players = new Map<string, MpPlayerState>();
+  world: MpWorldState = { enemies: [], pickups: [] };
   joined = false;
   private seq = 0;
   private transport: Transport;
@@ -299,6 +320,7 @@ export class GuestSession {
       for (const id of [...this.players.keys()]) {
         if (!seen.has(id)) this.players.delete(id); // คนออกห้อง
       }
+      if (msg.world) this.world = msg.world;
     }
   }
 

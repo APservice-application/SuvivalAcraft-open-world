@@ -205,3 +205,9 @@ Task: CI (GitHub Actions) + ปิดงานเอกสาร
 Status: DONE
 Evidence: .github/workflows/ci.yml (check + web typecheck + tests + content:validate + build ทุก push/PR) + STATUS.md/CHECKPOINT.md อัปเดตครบ (MASTER TASK LIST 17/17); suite 141/141 PASS ณ commit นี้
 Commit: (commit ถัดจาก CP-014)
+
+## CP-015
+Task: World-effect sync ใน co-op (DISCOVERED future #3)
+Status: DONE
+Evidence: protocol เพิ่ม MpWorldState (enemies/pickups/event/merchant) ใน snapshot + HostSession.setWorld + GuestSession.world; main.ts host ส่งสถานะจริงทุก tick, guest เห็นศัตรู host (จาง)/merchant ghost/แบนเนอร์ event ของ host; eventDef fallback ปลอดภัย; tests +2; suite 143/143 PASS; check + web typecheck + vite build PASS
+Commit: (commit ถัดจาก CP-015)
