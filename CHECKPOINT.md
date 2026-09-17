@@ -40,9 +40,10 @@ Engine แยกออกจาก Renderer (game/ = logic Engine, web/ = Render
 
 # CURRENT WORK
 
-Task: 20 Building/farming content + polish 
-Owner: master
-Status: PENDING
+Task: 09.x Building UI + Farming UI + 15 Local Save (IndexedDB)
+Owner: Arena Agent
+Status: IN_PROGRESS (claimed 2026-09-17)
+Plan: (1) Building UI place/break fence/wall/door/campfire → (2) Farming UI plant/grow/harvest → (3) Local Save IndexedDB + world select + autosave + v1 migration. แต่ละงานแยก checkpoint commit + tests ผ่านก่อน commit
 
 ---
 

@@ -24,6 +24,7 @@
 
 ## 2. สถานะล่าสุด (Checkpoint)
 
+- **งานกำลังทำ (IN PROGRESS)**: Building UI + Farming UI + G7 Local Save (IndexedDB) — Arena Agent 2026-09-17 (ดู CHECKPOINT.md CURRENT WORK)
 - **Branch**: `main`
 - **Commit ล่าสุด (local == remote)**: ดูจาก `git log --oneline -1` (web build ใน commit ถัดไป)
 - **Working tree**: สะอาด (ไม่มีงานค้าง)
