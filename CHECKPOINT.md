@@ -211,3 +211,9 @@ Task: World-effect sync ใน co-op (DISCOVERED future #3)
 Status: DONE
 Evidence: protocol เพิ่ม MpWorldState (enemies/pickups/event/merchant) ใน snapshot + HostSession.setWorld + GuestSession.world; main.ts host ส่งสถานะจริงทุก tick, guest เห็นศัตรู host (จาง)/merchant ghost/แบนเนอร์ event ของ host; eventDef fallback ปลอดภัย; tests +2; suite 143/143 PASS; check + web typecheck + vite build PASS
 Commit: (commit ถัดจาก CP-015)
+
+## CP-016
+Task: WebSocket transport + relay server (DISCOVERED future #2 — co-op ข้ามเครื่อง)
+Status: DONE
+Evidence: server/mp-server.mjs (relay แยกห้องตาม field room, npm run mp-server, PORT env) + web/src/ws-transport.ts (queue ก่อน open + bind frame ผูกห้องทันที + injectable WS impl) + main.ts (เปิดห้อง/เข้าร่วมผ่านเซิร์ฟเวอร์จาก UI) + index.html (ช่อง ws:// URL); tests/web-ws-transport.test.ts (2 integration tests ผ่าน relay จริง: join/welcome/action/world + กันข้ามห้อง); suite 145/145 PASS; check + web typecheck + vite build PASS; ทดสอบ server เริ่ม/ตอบ HTTP ได้
+Commit: (commit ถัดจาก CP-016)

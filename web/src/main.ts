@@ -19,6 +19,7 @@ import {
   HostSession, GuestSession, BroadcastChannelTransport,
   makeRoomCode, makePlayerId, type MpPlayerState, type Transport, type MpAction,
 } from "./multiplayer.js";
+import { WebSocketTransport } from "./ws-transport.js";
 import { TouchJoystick, KeyboardInput, setupButton } from "./controls.js";
 
 // ---------- DOM ----------
@@ -1287,19 +1288,30 @@ function renderCoop(): void {
   }
 }
 
-async function startHosting(): Promise<void> {
+async function startHosting(serverUrl?: string): Promise<void> {
   if (!player) await beginNewGame();
   stopCoop();
   mpRoom = makeRoomCode();
   mpMyId = makePlayerId();
   mpMyName = player.name;
   mpMyColor = player.outfit;
-  try {
-    mpTransport = new BroadcastChannelTransport(mpRoom);
-  } catch {
-    mpTransport = null;
-    notify("อุปกรณ์/เบราว์เซอร์นี้ไม่รองรับ co-op", "#ff8a80");
-    return;
+  if (serverUrl) {
+    try {
+      mpTransport = new WebSocketTransport(serverUrl, undefined, mpRoom);
+      notify("กำลังเชื่อมเซิร์ฟเวอร์...", "#ffd54f");
+    } catch {
+      mpTransport = null;
+      notify("ไม่รองรับ WebSocket บนเบราว์เซอร์นี้", "#ff8a80");
+      return;
+    }
+  } else {
+    try {
+      mpTransport = new BroadcastChannelTransport(mpRoom);
+    } catch {
+      mpTransport = null;
+      notify("อุปกรณ์/เบราว์เซอร์นี้ไม่รองรับ co-op", "#ff8a80");
+      return;
+    }
   }
   mpHost = new HostSession(mpRoom, mpMyId, myMpState(), mpTransport);
   if (coopEl) coopEl.style.display = "block";
@@ -1307,7 +1319,7 @@ async function startHosting(): Promise<void> {
   renderCoop();
 }
 
-async function joinRoom(roomInput: string): Promise<void> {
+async function joinRoom(roomInput: string, serverUrl?: string): Promise<void> {
   const room = roomInput.trim().toUpperCase();
   if (room.length < 3) { notify("ใส่รหัสห้องให้ถูกต้อง", "#ff8a80"); return; }
   if (!player) await beginNewGame();
@@ -1316,12 +1328,23 @@ async function joinRoom(roomInput: string): Promise<void> {
   mpMyId = makePlayerId();
   mpMyName = player.name;
   mpMyColor = player.outfit;
-  try {
-    mpTransport = new BroadcastChannelTransport(room);
-  } catch {
-    mpTransport = null;
-    notify("ไม่รองรับ co-op", "#ff8a80");
-    return;
+  if (serverUrl) {
+    try {
+      mpTransport = new WebSocketTransport(serverUrl, undefined, mpRoom);
+      notify("กำลังเชื่อมเซิร์ฟเวอร์...", "#ffd54f");
+    } catch {
+      mpTransport = null;
+      notify("ไม่รองรับ WebSocket บนเบราว์เซอร์นี้", "#ff8a80");
+      return;
+    }
+  } else {
+    try {
+      mpTransport = new BroadcastChannelTransport(room);
+    } catch {
+      mpTransport = null;
+      notify("ไม่รองรับ co-op", "#ff8a80");
+      return;
+    }
   }
   mpGuest = new GuestSession(room, mpMyId, player.name, player.outfit, mpTransport);
   mpGuest.join();
@@ -1604,6 +1627,17 @@ async function init(): Promise<void> {
   $("btn-coop-join").addEventListener("click", () => {
     const code = $<HTMLInputElement>("coop-code").value;
     void joinRoom(code).then(() => { if (mpRoom) showScreen("none"); });
+  });
+  $("btn-coop-host-lan").addEventListener("click", () => {
+    const url = $<HTMLInputElement>("coop-server").value.trim();
+    if (!url) { notify("ใส่ที่อยู่เซิร์ฟเวอร์ก่อน", "#ff8a80"); return; }
+    void startHosting(url).then(() => { if (mpRoom) showScreen("none"); });
+  });
+  $("btn-coop-join-lan").addEventListener("click", () => {
+    const url = $<HTMLInputElement>("coop-server").value.trim();
+    const code = $<HTMLInputElement>("coop-code").value;
+    if (!url) { notify("ใส่ที่อยู่เซิร์ฟเวอร์ก่อน", "#ff8a80"); return; }
+    void joinRoom(code, url).then(() => { if (mpRoom) showScreen("none"); });
   });
   $("btn-coop-back").addEventListener("click", () => { showScreen("screen-menu"); });
 

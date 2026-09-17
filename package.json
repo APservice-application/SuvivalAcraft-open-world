@@ -13,14 +13,17 @@
     "content:validate": "tsx tools/validate-content.ts",
     "dev": "vite",
     "build:web": "tsc -p web/tsconfig.json && vite build",
-    "preview": "vite preview --outDir dist-web"
+    "preview": "vite preview --outDir dist-web",
+    "mp-server": "node server/mp-server.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.19.1",
     "typescript": "5.9.3",
     "vite": "^5.4.21",
-    "vitest": "^2.1.4"
+    "vitest": "^2.1.4",
+    "ws": "^8.21.3"
   },
   "dependencies": {
     "zod": "^4.1.12"
