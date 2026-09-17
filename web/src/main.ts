@@ -6,6 +6,7 @@ import {
   ITEMS, RECIPES, Slot,
 } from "./state.js";
 import { buildableByItem, isDoorTile, toggledDoor, itemForBuildingTile, occupiedTile } from "./building.js";
+import { FarmPlots, cropStageAt, isMatureAt, plotKey } from "./farming.js";
 import { TouchJoystick, KeyboardInput, setupButton } from "./controls.js";
 
 // ---------- DOM ----------
@@ -24,6 +25,8 @@ let gameSeed = 0;
 let time = 6; // game-hour (6 = dawn)
 const DAY_LEN = 240; // seconds per full day
 let dayCount = 1;
+let gameSeconds = 0; // total gameplay seconds since world start (drives crop growth)
+let farmPlots = new FarmPlots();
 
 let camX = 0, camY = 0;
 let running = false;
@@ -50,6 +53,7 @@ interface Quest { id: string; name: string; desc: string; target: number; progre
 let quests: Quest[] = [
   { id: "gather_wood", name: "เก็บไม้", desc: "เก็บไม้ 5", target: 5, progress: 0, done: false },
   { id: "kill_slime", name: "ปราบศัตรู", desc: "กำจัดศัตรู 2", target: 2, progress: 0, done: false },
+  { id: "harvest_crop", name: "เก็บเกี่ยว", desc: "เก็บพืชผล 2 ครั้ง", target: 2, progress: 0, done: false },
 ];
 let questEl: HTMLElement | null = null;
 
@@ -169,6 +173,8 @@ function startGame(p: PlayerState, seed: number, t: number): void {
   gameSeed = seed;
   world = new World(seed);
   time = t;
+  gameSeconds = 0;
+  farmPlots = new FarmPlots();
   camX = p.pos.x;
   camY = p.pos.y;
   enemies = [];
@@ -494,6 +500,10 @@ function interact(): void {
     renderHud();
     return;
   }
+  if (ftTile === T_CROP_0 || ftTile === T_CROP_1 || ftTile === T_CROP_2) {
+    harvestCrop(ft.x, ft.z);
+    return;
+  }
 
   // 2) standing tile: natural gather
   const g = world.gather(px, pz);
@@ -576,6 +586,10 @@ function useSelected(): void {
     placeBuilding(s.item);
     return;
   }
+  if (s.item === "wheat_seed") {
+    plantSeed();
+    return;
+  }
   quickUse(selectedSlot);
 }
 
@@ -586,10 +600,68 @@ function useButtonLabel(): string {
   if (!s) return "";
   const b = buildableByItem(s.item);
   if (b) return `${b.icon}<br/><span style="font-size:9px">วาง</span>`;
+  if (s.item === "wheat_seed") return `🌱<br/><span style="font-size:9px">ปลูก</span>`;
   const def = ITEMS[s.item];
   if (def?.category === "food") return `${def.icon}<br/><span style="font-size:9px">กิน</span>`;
   if (def?.category === "tool" || def?.category === "weapon") return `${def.icon}<br/><span style="font-size:9px">ถือ</span>`;
   return `${def?.icon ?? ""}<br/><span style="font-size:9px">ใช้</span>`;
+}
+
+// ============================================================
+//  FARMING
+// ============================================================
+const PLANTABLE_TILES = [T_GRASS, T_GRASS_ALT, T_DIRT];
+
+/** Plant the seed item at the facing tile (grass/dirt only). */
+function plantSeed(): boolean {
+  const ft = facingTile();
+  const t = world.tileAt(ft.x, ft.z);
+  if (!PLANTABLE_TILES.includes(t)) {
+    notify("ปลูกไม่ได้: ต้องเป็นหญ้าหรือดิน", "#ff8a80");
+    return false;
+  }
+  if (occupiedTile(t) || farmPlots.has(ft.x, ft.z)) {
+    notify("ปลูกไม่ได้: มีสิ่งกีดขวาง", "#ff8a80");
+    return false;
+  }
+  if (!removeItem(player, "wheat_seed", 1)) {
+    notify("ไม่มีเมล็ดพืช", "#ff8a80");
+    return false;
+  }
+  farmPlots.plant(ft.x, ft.z, gameSeconds);
+  world.setEdit(ft.x, ft.z, T_CROP_0);
+  notify("🌱 ปลูกเมล็ดพืชแล้ว รอโต...", "#aaf0c2");
+  renderHud();
+  return true;
+}
+
+/** Advance crop growth; syncs world tiles to current stage. */
+function farmingTick(dt: number): void {
+  gameSeconds += dt;
+  for (const e of farmPlots.entries()) {
+    const stage = cropStageAt(e.plantedAt, gameSeconds);
+    const tile = T_CROP_0 + stage;
+    if (world.tileAt(e.x, e.z) !== tile) world.setEdit(e.x, e.z, tile);
+  }
+}
+
+/** Harvest a mature crop at (x,z). */
+function harvestCrop(x: number, z: number): void {
+  const planted = farmPlots.state[plotKey(x, z)];
+  if (planted === undefined) return;
+  if (!isMatureAt(planted, gameSeconds)) {
+    notify("🌱 พืชยังไม่โต", "#ffd54f");
+    return;
+  }
+  farmPlots.harvest(x, z);
+  world.setEdit(x, z, T_TILLED);
+  const cnt = 1 + (Math.random() < 0.5 ? 1 : 0);
+  addItem(player, "wheat", cnt);
+  if (Math.random() < 0.5) addItem(player, "wheat_seed", 1);
+  addXp(player, 5);
+  questProgress("harvest_crop", 1);
+  notify(`🌾 เก็บข้าว x${cnt} +5 XP`, "#aaf0c2");
+  renderHud();
 }
 
 // ============================================================
@@ -705,15 +777,19 @@ function update(dt: number): void {
   time += dt / DAY_LEN * 24;
   if (time >= 24) { time -= 24; dayCount++; }
 
+  // farming growth
+  farmingTick(dt);
+
   // combat
   updateEnemies(dt);
 
-  // context: show interact button if gatherable tile nearby OR facing building/door
+  // context: show interact button if gatherable tile OR facing building/door/crop
   const px = Math.round(player.pos.x), pz = Math.round(player.pos.y);
   const gatherable = world.gather(px, pz) !== null;
   const ft = facingTile();
   const ftTile = world.tileAt(ft.x, ft.z);
-  const facingInteractive = gatherable === false && (itemForBuildingTile(ftTile) !== undefined || isDoorTile(ftTile));
+  const cropTile = ftTile === T_CROP_0 || ftTile === T_CROP_1 || ftTile === T_CROP_2;
+  const facingInteractive = itemForBuildingTile(ftTile) !== undefined || isDoorTile(ftTile) || cropTile;
   $("btn-interact").style.display = (gatherable || facingInteractive) ? "" : "none";
   // use button follows selection, label reflects action
   const useEl = $("btn-use");

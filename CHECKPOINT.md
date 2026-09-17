@@ -80,13 +80,13 @@ Plan: (1) Building UI place/break fence/wall/door/campfire → (2) Farming UI pl
 
 # LAST COMPLETED
 
-CP-005 Building UI (web): วาง/ทุบ fence/wall/door/campfire + เปิด-ปิดประตู + สูตรคราฟต์ใหม่ 4 สูตร (ก่อนหน้า: 12.x Day/Night + 13.x Weather + 10.x AI in web + sprite atlas)
+CP-006 Farming UI (web): ปลูกเมล็ด/โต 3 ระยะ/เก็บเกี่ยว + เควสเก็บเกี่ยว (ก่อนหน้า: CP-005 Building UI)
 
 ---
 
 # NEXT ACTION
 
-Farming UI (plant/grow/harvest) → Local Save (IndexedDB) + world select + autosave
+Local Save (IndexedDB) + world select UI + autosave + v1 migration
 
 ---
 
@@ -143,3 +143,9 @@ Task: 09.x Building UI (web)
 Status: DONE
 Evidence: web/src/building.ts (pure) + world.ts edits system + state.ts items/recipes ใหม่ 4 + main.ts place/break/door-toggle; tests/web-building.test.ts (11 tests); suite 69/69 PASS; npm run check PASS; web typecheck PASS; vite build PASS
 Commit: (commit ถัดจาก CP-005)
+
+## CP-006
+Task: Farming UI (web) — plant/grow/harvest
+Status: DONE
+Evidence: web/src/farming.ts (pure, stage จาก gameSeconds) + main.ts (plantSeed/farmingTick/harvestCrop + quest harvest_crop + seed จาก berry 40%); tests/web-farming.test.ts (10 tests); suite 79/79 PASS; check PASS; web typecheck PASS; vite build PASS
+Commit: (commit ถัดจาก CP-006)
