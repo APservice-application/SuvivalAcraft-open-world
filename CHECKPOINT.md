@@ -79,7 +79,7 @@ Status: IN_PROGRESS (claimed 2026-09-17 รอบ 2) — ทำเป็น CP-0
 
 # LAST COMPLETED
 
-CP-007 Local Save (IndexedDB) + world select + autosave + v1 migration (ก่อนหน้า: CP-006 Farming UI, CP-005 Building UI)
+CP-008 World Events (task 14) — migration/storm/wildfire/merchant/camp (ก่อนหน้า: CP-007 Save, CP-006 Farming, CP-005 Building)
 
 ---
 
@@ -154,3 +154,9 @@ Task: 15 Local Save (IndexedDB) + G7 Save UI
 Status: DONE
 Evidence: web/src/saves.ts (KVStore: IndexedDB/localStorage/memory + SaveManager + migrateV1 จาก v1) + main.ts (multi-world create/play/delete + autosave 30s + save ตอน pause/ออกเมนู) + index.html (หน้า "โลกของฉัน" + ลบแบบยืนยัน 2 จังหวะ); tests/web-saves.test.ts (9 tests); suite 88/88 PASS; check PASS; web typecheck PASS; vite build PASS; content:validate PASS
 Commit: (commit ถัดจาก CP-007)
+
+## CP-008
+Task: 14 World Events (web)
+Status: DONE
+Evidence: web/src/events.ts (scheduler ล้วน + weighted pick + minDay) + main.ts (event visuals ฝน/ไฟ, migration spawn, merchant พร้อมหน้าแลกของ 5 รายการ, camp เก็บของเดินเก็บได้, banner นับถอยหลัง, gold chip); tests/web-events.test.ts (10 tests); suite 98/98 PASS; check PASS; web typecheck PASS; vite build PASS
+Commit: (commit ถัดจาก CP-008)

@@ -8,6 +8,7 @@ import {
 import { buildableByItem, isDoorTile, toggledDoor, itemForBuildingTile, occupiedTile } from "./building.js";
 import { FarmPlots, cropStageAt, isMatureAt, plotKey } from "./farming.js";
 import { SaveManager, pickStore, LEGACY_KEY, type WorldSaveV2, type WorldMeta } from "./saves.js";
+import { EventScheduler, eventDef, type EventKind } from "./events.js";
 import { TouchJoystick, KeyboardInput, setupButton } from "./controls.js";
 
 // ---------- DOM ----------
@@ -35,6 +36,15 @@ let currentWorld: WorldMeta | null = null;
 let autosaveTimer = 0;
 let latestWorldId: string | null = null;
 const AUTOSAVE_EVERY = 30; // seconds
+
+// world events (task 14)
+let eventSched = new EventScheduler(45);
+let merchant: { x: number; z: number; until: number } | null = null;
+let pickups: { x: number; z: number; item: string; count: number }[] = [];
+let fireDmgAt = 0;
+let bannerEl: HTMLElement | null = null;
+let tradeEl: HTMLElement | null = null;
+let tradeOpen = false;
 
 let camX = 0, camY = 0;
 let running = false;
@@ -103,6 +113,17 @@ function buildDynamicUI(): void {
   craftEl.id = "craft-panel";
   craftEl.style.cssText = "position:absolute;right:10px;bottom:150px;width:210px;max-height:46%;overflow:auto;background:rgba(10,16,30,.96);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:10px;z-index:7;display:none;";
   hud.appendChild(craftEl);
+
+  // event banner (top-center under msg)
+  bannerEl = document.createElement("div");
+  bannerEl.style.cssText = "position:absolute;top:calc(max(8px,env(safe-area-inset-top)) + 84px);left:50%;transform:translateX(-50%);background:rgba(10,16,30,.85);border:1px solid rgba(255,213,79,.4);color:#ffd54f;font-size:12px;padding:4px 10px;border-radius:8px;z-index:6;display:none;pointer-events:none;";
+  hud.appendChild(bannerEl);
+
+  // trade panel (merchant)
+  tradeEl = document.createElement("div");
+  tradeEl.id = "trade-panel";
+  tradeEl.style.cssText = "position:absolute;right:10px;bottom:150px;width:230px;max-height:46%;overflow:auto;background:rgba(10,16,30,.96);border:1px solid rgba(255,213,79,.35);border-radius:12px;padding:10px;z-index:7;display:none;";
+  hud.appendChild(tradeEl);
 }
 
 function renderCraft(): void {
@@ -186,6 +207,12 @@ function startGame(p: PlayerState, seed: number, t: number, restore?: WorldSaveV
   enemies = [];
   spawnTimer = 1;
   autosaveTimer = 0;
+  eventSched = new EventScheduler(45);
+  merchant = null;
+  pickups = [];
+  fireDmgAt = 0;
+  tradeOpen = false;
+  if (tradeEl) tradeEl.style.display = "none";
   if (restore) {
     currentWorld = restore.meta;
     dayCount = restore.dayCount || 1;
@@ -448,6 +475,40 @@ function render(): void {
     ctx.fillRect(sx + 10, sy + 5, 2, 2);
   }
 
+  // world event visuals
+  if (eventSched.activeKind("storm", gameSeconds)) {
+    ctx.fillStyle = "rgba(30,50,90,0.25)";
+    ctx.fillRect(0, 0, cw, ch);
+    ctx.strokeStyle = "rgba(160,190,255,0.5)";
+    ctx.beginPath();
+    for (let i = 0; i < 50; i++) {
+      const rx = Math.random() * cw, ry = Math.random() * ch;
+      ctx.moveTo(rx, ry);
+      ctx.lineTo(rx - 3, ry + 10);
+    }
+    ctx.stroke();
+  } else if (eventSched.activeKind("wildfire", gameSeconds)) {
+    ctx.fillStyle = "rgba(200,80,20,0.14)";
+    ctx.fillRect(0, 0, cw, ch);
+  }
+
+  // merchant
+  if (merchant) {
+    const ms = worldToScreen(merchant.x, merchant.z);
+    ctx.fillStyle = "#c9a53c";
+    ctx.fillRect(ms.sx + 4, ms.sy + 3, 8, 12);
+    ctx.fillStyle = "#e8b57a";
+    ctx.fillRect(ms.sx + 6, ms.sy, 4, 4);
+    ctx.font = "9px monospace";
+    ctx.fillText("💰", ms.sx + 9, ms.sy - 2);
+  }
+  // ground pickups
+  for (const pk of pickups) {
+    const ps = worldToScreen(pk.x, pk.z);
+    ctx.font = "10px monospace";
+    ctx.fillText(pk.item === "gold" ? "🪙" : (ITEMS[pk.item]?.icon ?? "📦"), ps.sx + 3, ps.sy + 12);
+  }
+
   // player
   const { sx, sy } = worldToScreen(player.pos.x, player.pos.y);
   ctx.fillStyle = player.outfit || outfitColor;
@@ -476,6 +537,8 @@ function dayDarkness(): number {
   else if (time > 20) d = (time - 20) / 4;
   else if (time > 17) d = (time - 17) / 3;
   if (d < 0) d = 0;
+  if (eventSched.activeKind("storm", gameSeconds)) d += 0.3;
+  else if (eventSched.activeKind("wildfire", gameSeconds)) d += 0.15;
   return Math.min(1, d);
 }
 
@@ -593,6 +656,12 @@ function facingTile(): { x: number; z: number } {
 function interact(): void {
   const px = Math.round(player.pos.x), pz = Math.round(player.pos.y);
   const ft = facingTile();
+
+  // 0) merchant: trade
+  if (merchant && ft.x === merchant.x && ft.z === merchant.z) {
+    toggleTrade();
+    return;
+  }
 
   // 1) facing tile: door toggle / break placed building / harvest crop
   const ftTile = world.tileAt(ft.x, ft.z);
@@ -720,6 +789,141 @@ function useButtonLabel(): string {
 }
 
 // ============================================================
+//  WORLD EVENTS (task 14)
+// ============================================================
+const TRADES: { give: string; giveCount: number; get: string; getCount: number }[] = [
+  { give: "gold", giveCount: 8, get: "meat_cooked", getCount: 1 },
+  { give: "gold", giveCount: 5, get: "torch", getCount: 2 },
+  { give: "gold", giveCount: 4, get: "wheat_seed", getCount: 2 },
+  { give: "gold", giveCount: 6, get: "fence", getCount: 2 },
+  { give: "wood", giveCount: 4, get: "gold", getCount: 3 },
+];
+
+function spawnEnemyNear(dist: number): void {
+  for (let tries = 0; tries < 12; tries++) {
+    const ang = Math.random() * Math.PI * 2;
+    const ex = Math.round(player.pos.x + Math.cos(ang) * dist);
+    const ey = Math.round(player.pos.y + Math.sin(ang) * dist);
+    if (!world.isWalkable(ex, ey)) continue;
+    enemies.push({ x: ex, y: ey, hp: 12, maxHp: 12, dmg: 3, kind: Math.random() < 0.5 ? "slime" : "goblin", aggro: true });
+    return;
+  }
+}
+
+function freeTileNear(cx: number, cz: number, minD: number, maxD: number): { x: number; z: number } | null {
+  for (let tries = 0; tries < 40; tries++) {
+    const ang = Math.random() * Math.PI * 2;
+    const d = minD + Math.random() * (maxD - minD);
+    const x = Math.round(cx + Math.cos(ang) * d);
+    const z = Math.round(cz + Math.sin(ang) * d);
+    if (world.isWalkable(x, z) && !(x === Math.round(player.pos.x) && z === Math.round(player.pos.y))) return { x, z };
+  }
+  return null;
+}
+
+function onEventStart(kind: EventKind): void {
+  const def = eventDef(kind);
+  notify(`${def.icon} เกิดเหตุการณ์: ${def.name}!`, "#ffd54f");
+  if (kind === "migration") {
+    for (let i = 0; i < 4; i++) spawnEnemyNear(24 + Math.random() * 20);
+  } else if (kind === "merchant") {
+    const spot = freeTileNear(Math.round(player.pos.x), Math.round(player.pos.y), 3, 8);
+    if (spot) merchant = { x: spot.x, z: spot.z, until: gameSeconds + eventDef("merchant").duration };
+    else notify("💰 พ่อค้าหาที่แวะไม่ได้...", "#ffd54f");
+  } else if (kind === "camp") {
+    const pool = ["wood", "stone", "berry", "fiber", "gold"];
+    for (let i = 0; i < 3; i++) {
+      const spot = freeTileNear(Math.round(player.pos.x), Math.round(player.pos.y), 2, 6);
+      if (!spot) break;
+      const item = pool[Math.floor(Math.random() * pool.length)]!;
+      pickups.push({ x: spot.x, z: spot.z, item, count: item === "gold" ? 5 : 2 });
+    }
+    notify("⛺ พบแคมป์ร้าง — เดินเก็บของได้เลย", "#aaf0c2");
+  }
+}
+
+function updateEvents(dt: number): void {
+  void dt;
+  const started = eventSched.tick(gameSeconds, dayCount, Math.random);
+  if (started) onEventStart(started);
+
+  if (merchant && gameSeconds >= merchant.until) {
+    merchant = null;
+    if (tradeOpen) closeTrade();
+  }
+
+  // wildfire: burn nearby resource tiles + heat damage tick
+  if (eventSched.activeKind("wildfire", gameSeconds)) {
+    const px = Math.round(player.pos.x), pz = Math.round(player.pos.y);
+    for (let dz = -5; dz <= 5; dz++) {
+      for (let dx = -5; dx <= 5; dx++) {
+        const t = world.tileAt(px + dx, pz + dz);
+        if ((t === T_TREE || t === T_BUSH || t === T_BERRY) && Math.random() < 0.08) world.consume(px + dx, pz + dz);
+      }
+    }
+    if (gameSeconds >= fireDmgAt) {
+      fireDmgAt = gameSeconds + 1;
+      player.hp = Math.max(1, player.hp - 1);
+      notify("🔥 ไฟป่าร้อนแรง! -1 HP", "#ff8a80");
+    }
+  }
+
+  // ground pickups (walk over)
+  const px = Math.round(player.pos.x), pz = Math.round(player.pos.y);
+  pickups = pickups.filter((pk) => {
+    if (pk.x !== px || pk.z !== pz) return true;
+    if (pk.item === "gold") { player.gold += pk.count; notify(`🪙 +${pk.count} gold`, "#ffd54f"); }
+    else { addItem(player, pk.item, pk.count); notify(`เก็บ ${ITEMS[pk.item]?.icon} ${ITEMS[pk.item]?.name} x${pk.count}`, "#aaf0c2"); }
+    renderHud();
+    return false;
+  });
+
+  // event banner countdown
+  if (bannerEl) {
+    const a = eventSched.active;
+    if (a && gameSeconds < a.endsAt) {
+      const def = eventDef(a.kind);
+      bannerEl.textContent = `${def.icon} ${def.name} · ${Math.max(0, Math.ceil(a.endsAt - gameSeconds))}s`;
+      bannerEl.style.display = "";
+    } else {
+      bannerEl.style.display = "none";
+    }
+  }
+}
+
+function toggleTrade(): void { if (tradeOpen) closeTrade(); else openTrade(); }
+function openTrade(): void { tradeOpen = true; renderTrade(); }
+function closeTrade(): void { tradeOpen = false; if (tradeEl) tradeEl.style.display = "none"; }
+
+function renderTrade(): void {
+  if (!tradeEl) return;
+  let html = `<div style='font-weight:700;margin-bottom:6px;color:#ffd54f'>💰 พ่อค้าเร่ร่อน (gold: ${player.gold})</div>`;
+  TRADES.forEach((tr, i) => {
+    const gi = ITEMS[tr.give], ge = ITEMS[tr.get];
+    const ok = countItems(player, tr.give) >= tr.giveCount;
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:6px;border:1px solid ${ok ? "rgba(255,213,79,.5)" : "rgba(255,255,255,.12)"};border-radius:8px;margin-bottom:6px">
+      <span style="font-size:12px">${gi?.icon ?? ""}${tr.giveCount} ➜ ${ge?.icon ?? ""}${tr.getCount} ${ge?.name ?? ""}</span>
+      <button data-trade="${i}" style="border:0;border-radius:6px;padding:4px 8px;background:${ok ? "#b8860b" : "#2a3450"};color:${ok ? "#06101f" : "#8b93ad"};font-weight:700" ${ok ? "" : "disabled"}>แลก</button>
+    </div>`;
+  });
+  tradeEl.innerHTML = html;
+  tradeEl.style.display = "block";
+  tradeEl.querySelectorAll<HTMLButtonElement>("[data-trade]").forEach((b) => {
+    b.addEventListener("click", () => {
+      const tr = TRADES[Number(b.dataset.trade)];
+      if (!tr) return;
+      if (!removeItem(player, tr.give, tr.giveCount)) { notify("ของไม่พอ", "#ff8a80"); return; }
+      addItem(player, tr.get, tr.getCount);
+      if (tr.get === "gold") notify(`💰 +${tr.getCount} gold`, "#ffd54f");
+      else notify(`แลกได้ ${ITEMS[tr.get]?.icon} ${ITEMS[tr.get]?.name} x${tr.getCount}`, "#aaf0c2");
+      questProgress("talk_merchant", 1);
+      renderHud();
+      renderTrade();
+    });
+  });
+}
+
+// ============================================================
 //  FARMING
 // ============================================================
 const PLANTABLE_TILES = [T_GRASS, T_GRASS_ALT, T_DIRT];
@@ -804,6 +1008,8 @@ function renderQuickBar(): void {
 function renderHud(): void {
   $("hud-hp").textContent = `${Math.ceil(player.hp)}`;
   $("hud-hunger").textContent = `${Math.ceil(player.hunger)}`;
+  const goldEl = $("hud-gold");
+  if (goldEl) goldEl.textContent = `${player.gold}`;
   $("hud-level").textContent = `${player.level}`;
   const need = xpNeed(player);
   const pct = Math.min(100, Math.round((player.xp / need) * 100));
@@ -861,7 +1067,7 @@ function update(dt: number): void {
   let dx = joy.dx || kb.dx;
   let dy = joy.dy || kb.dy;
   const mag = joy.magnitude || kb.magnitude;
-  const speed = 90 * (dodgeMove() ? 3 : 1);
+  const speed = 90 * (dodgeMove() ? 3 : 1) * (eventSched.activeKind("storm", gameSeconds) ? 0.8 : 1);
   if (mag > 0) {
     // remember facing (dominant axis) for build/plant/interact targeting
     if (Math.abs(dx) >= Math.abs(dy)) { faceX = dx > 0 ? 1 : -1; faceZ = 0; }
@@ -891,6 +1097,9 @@ function update(dt: number): void {
 
   // farming growth
   farmingTick(dt);
+
+  // world events
+  updateEvents(dt);
 
   // autosave
   autosaveTimer += dt;
