@@ -1,7 +1,7 @@
 # STATUS — SuvivalAcraft Open World
 
 ไฟล์เช็คสถานะการทำงานกลาง (source of truth) สำหรับ AI และผู้พัฒนา
-อัปเดตครั้งล่าสุด: 2026-08-29 (UTC) — รอบ 2 เพิ่ม web build
+อัปเดตครั้งล่าสุด: 2026-09-17 (UTC) — รอบ 3: Building UI + Farming UI + Local Save (CP-005..CP-007)
 
 > กติกา: อ่านไฟล์นี้ก่อนเริ่มงานทุกครั้ง / อัปเดตหลังงานทุกครั้ง
 > เพิ่มงานใหม่ได้ตลอดที่หัวข้อ "เพิ่มงาน / คำสั่งใหม่" — ใส่ timestamp, ผู้เสนอ, และสถานะ
@@ -18,13 +18,17 @@
 | G4 | อัปโหลดขึ้น GitHub repo `SuvivalAcraft-open-world` และซิงค์ commit | ✅ เสร็จ (5603531) |
 | G5 | สร้างสถานะ/checkpoint ไฟล์สำหรับการต่องานหลาย AI | ✅ เสร็จ (ไฟล์นี้) |
 | G6 | Web build (HTML/canvas เล่นได้บนเบราว์เซอร์) | ✅ เสร็จ (deploy GitHub Pages) |
-| G7 | เพิ่มระบบ save/load จริง + หน้า UI เลือกโลก | ⏳ ยังไม่เริ่ม (มี web แบบ single-session) |
+| G7 | เพิ่มระบบ save/load จริง + หน้า UI เลือกโลก | ✅ เสร็จ (CP-007: IndexedDB multi-world + autosave 30s + migration v1) |
 | G8 | Multiplayer (LAN/local-first เสมือน A_Survival) | ⏳ ยังไม่เริ่ม |
 | G9 | Day/Night + Weather + Creature AI ในเกมจริง + sprite atlas | ✅ เสร็จ |
 
 ## 2. สถานะล่าสุด (Checkpoint)
 
-- **งานกำลังทำ (IN PROGRESS)**: Building UI + Farming UI + G7 Local Save (IndexedDB) — Arena Agent 2026-09-17 (ดู CHECKPOINT.md CURRENT WORK)
+- **งานกำลังทำ (IN PROGRESS)**: ไม่มี (CP-005..CP-007 เสร็จสมบูรณ์, tests 88/88 PASS)
+- **สรุปรอบนี้ (2026-09-17, Arena Agent)**:
+  - CP-005 Building UI: วาง/ทุบ fence/wall/door/campfire + เปิด-ปิดประตู + สูตรคราฟต์ 4 ใหม่
+  - CP-006 Farming UI: ปลูก/โต 3 ระยะ/เก็บเกี่ยว + เควสเก็บเกี่ยว + เมล็ดจากเบอร์รี่
+  - CP-007 Local Save: IndexedDB multi-world + หน้า "โลกของฉัน" + autosave 30s + migration จาก v1
 - **Branch**: `main`
 - **Commit ล่าสุด (local == remote)**: ดูจาก `git log --oneline -1` (web build ใน commit ถัดไป)
 - **Working tree**: สะอาด (ไม่มีงานค้าง)
@@ -51,7 +55,7 @@
 ## 4. งานค้าง / ยังไม่ได้ทำ (Backlog)
 
 - [ ] **G6 — Web build/UI**: พอร์ต game core ลงเบราว์เซอร์ (Vite + canvas), HUD, hotbar, วางบล็อก/คราฟต์ UI (อ้างอิง MCPE_Mirror studio pattern)
-- [ ] **G7 — Save UI**: โหลด/บันทึกโลกผ่าน UI, เลือก world, auto-save
+- [x] ~~**G7 — Save UI**: โหลด/บันทึกโลกผ่าน UI, เลือก world, auto-save~~ (เสร็จ CP-007 2026-09-17)
 - [ ] **G8 — Multiplayer**: local-first LAN (อ้างอิง A_Survival: chained action log + validation)
 - [ ] Audio: ใส่ไฟล์เสียงจริง (ตอนนี้มี event bus + profile แล้ว)
 - [ ] เพิ่มเนื้อหา: biomes เพิ่ม, block ใหม่, อาวุธ/armor/ศัตรู/boss เพิ่ม
@@ -85,3 +89,5 @@
 - ใช้ WASD เดิน, คลิกวาง/ขุดบล็อก, คราฟต์ปุ่ม C, HUD แสดง HP/ความหิว/กระหาย, hotbar
 - Deploy: GitHub Actions `.github/workflows/pages.yml` → GitHub Pages
 - เปิดเล่นได้ที่: `https://apirak272543-ship-it.github.io/SuvivalAcraft-open-world/`
+
+- [x] 2026-09-17 — Building UI (CP-005) + Farming UI (CP-006) + Local Save IndexedDB/เลือกโลก/autosave (CP-007) — Arena Agent

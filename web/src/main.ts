@@ -2,11 +2,12 @@
 import { World, TILE_SIZE, T_WATER, T_STONE, T_ROCK, T_TREE, T_BUSH, T_BERRY, T_GRASS, T_GRASS_ALT, T_DIRT, T_SAND, T_FLOOR, T_PATH, T_FENCE, T_WALL, T_DOOR, T_DOOR_OPEN, T_CAMPFIRE, T_TILLED, T_CROP_0, T_CROP_1, T_CROP_2, tileName } from "./world.js";
 import {
   PlayerState, newPlayer, addItem, removeItem, countItems, canCraft, craftRecipe,
-  useItem, equippedDamage, survivalTick, addXp, saveGame, loadGame, hasSave, xpNeed,
+  useItem, equippedDamage, survivalTick, addXp, xpNeed,
   ITEMS, RECIPES, Slot,
 } from "./state.js";
 import { buildableByItem, isDoorTile, toggledDoor, itemForBuildingTile, occupiedTile } from "./building.js";
 import { FarmPlots, cropStageAt, isMatureAt, plotKey } from "./farming.js";
+import { SaveManager, pickStore, LEGACY_KEY, type WorldSaveV2, type WorldMeta } from "./saves.js";
 import { TouchJoystick, KeyboardInput, setupButton } from "./controls.js";
 
 // ---------- DOM ----------
@@ -27,6 +28,13 @@ const DAY_LEN = 240; // seconds per full day
 let dayCount = 1;
 let gameSeconds = 0; // total gameplay seconds since world start (drives crop growth)
 let farmPlots = new FarmPlots();
+
+// save system
+let saveMgr: SaveManager | null = null;
+let currentWorld: WorldMeta | null = null;
+let autosaveTimer = 0;
+let latestWorldId: string | null = null;
+const AUTOSAVE_EVERY = 30; // seconds
 
 let camX = 0, camY = 0;
 let running = false;
@@ -168,17 +176,29 @@ function seedFrom(str: string): number {
   return h >>> 0;
 }
 
-function startGame(p: PlayerState, seed: number, t: number): void {
+function startGame(p: PlayerState, seed: number, t: number, restore?: WorldSaveV2): void {
   player = p;
   gameSeed = seed;
   world = new World(seed);
   time = t;
-  gameSeconds = 0;
-  farmPlots = new FarmPlots();
   camX = p.pos.x;
   camY = p.pos.y;
   enemies = [];
   spawnTimer = 1;
+  autosaveTimer = 0;
+  if (restore) {
+    currentWorld = restore.meta;
+    dayCount = restore.dayCount || 1;
+    gameSeconds = restore.gameSeconds || 0;
+    world.setEdits(restore.edits || []);
+    farmPlots = new FarmPlots();
+    farmPlots.state = { ...(restore.crops || {}) };
+  } else {
+    currentWorld = null;
+    dayCount = 1;
+    gameSeconds = 0;
+    farmPlots = new FarmPlots();
+  }
   notify(`ยินดีต้อนรับ ${p.name} 🏕️`, "#aaf0c2");
   showScreen("none");
   showHud(true);
@@ -191,13 +211,105 @@ function startGame(p: PlayerState, seed: number, t: number): void {
   lockLandscape();
 }
 
-function beginNewGame(): void {
+async function beginNewGame(): Promise<void> {
   const seedInput = $<HTMLInputElement>("world-seed").value || "1337";
   const seed = seedFrom(seedInput);
   const name = $<HTMLInputElement>("char-name").value || "นักผจญภัย";
+  const worldName = $<HTMLInputElement>("world-name").value || "โลกลิขิต";
   // spawn near village center (36,36)
   const p = newPlayer(name, outfitColor, 36, 36);
-  startGame(p, seed, 6);
+  const meta = saveMgr ? await saveMgr.createWorld(worldName, seed) : null;
+  const skeleton: WorldSaveV2 | undefined = meta ? {
+    v: 2, meta, time: 6, dayCount: 1, gameSeconds: 0, player: p, edits: [], crops: {}, savedAt: Date.now(),
+  } : undefined;
+  startGame(p, seed, 6, skeleton);
+  void saveNow("auto");
+}
+
+// ============================================================
+//  SAVE / LOAD
+// ============================================================
+async function saveNow(kind: "auto" | "manual"): Promise<void> {
+  if (!saveMgr || !currentWorld || !world || !player) return;
+  const save: WorldSaveV2 = {
+    v: 2,
+    meta: { ...currentWorld },
+    time,
+    dayCount,
+    gameSeconds,
+    player,
+    edits: world.getEdits(),
+    crops: { ...farmPlots.state },
+    savedAt: Date.now(),
+  };
+  try {
+    await saveMgr.saveWorld(save);
+    currentWorld = save.meta;
+    if (kind === "manual") notify("💾 บันทึกเกมแล้ว", "#aaf0c2");
+  } catch {
+    if (kind === "manual") notify("บันทึกไม่สำเร็จ", "#ff8a80");
+  }
+}
+
+async function playWorld(id: string): Promise<void> {
+  if (!saveMgr) return;
+  const s = await saveMgr.loadWorld(id);
+  if (!s) {
+    notify("โหลดโลกไม่สำเร็จ", "#ff8a80");
+    return;
+  }
+  startGame(s.player, s.meta.seed, s.time, s);
+}
+
+async function playLatestWorld(): Promise<void> {
+  if (!saveMgr) return;
+  const metas = (await saveMgr.listWorlds()).sort((a, b) => b.updatedAt - a.updatedAt);
+  if (!metas.length) return;
+  await playWorld(metas[0]!.id);
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
+}
+
+async function renderWorlds(): Promise<void> {
+  const listEl = $("worlds-list");
+  if (!listEl) return;
+  if (!saveMgr) { listEl.innerHTML = "<div style='color:#9fb0d8;font-size:13px'>ระบบเซฟยังไม่พร้อม</div>"; return; }
+  const metas = (await saveMgr.listWorlds()).sort((a, b) => b.updatedAt - a.updatedAt);
+  if (!metas.length) {
+    listEl.innerHTML = "<div style='color:#9fb0d8;font-size:13px;text-align:center;padding:10px'>ยังไม่มีโลก — กดสร้างโลกใหม่เลย!</div>";
+    return;
+  }
+  listEl.innerHTML = "";
+  for (const m of metas) {
+    const row = document.createElement("div");
+    row.className = "world-row";
+    const info = document.createElement("div");
+    info.className = "world-info";
+    info.innerHTML = `<b>${escapeHtml(m.name)}</b><div style="font-size:11px;color:#9fb0d8">seed ${m.seed} · ${new Date(m.updatedAt).toLocaleString()}</div>`;
+    const play = document.createElement("button");
+    play.className = "btn world-play";
+    play.textContent = "▶ เล่น";
+    play.addEventListener("click", () => { void playWorld(m.id); });
+    const del = document.createElement("button");
+    del.className = "btn world-del";
+    del.textContent = "🗑";
+    del.addEventListener("click", () => {
+      if (del.dataset.confirm === "1") {
+        void saveMgr?.deleteWorld(m.id).then(() => { void renderWorlds(); void updateContinueBtn(); });
+      } else {
+        del.dataset.confirm = "1";
+        del.textContent = "แน่ใจ?";
+        del.style.background = "#a33";
+        setTimeout(() => { del.dataset.confirm = ""; del.textContent = "🗑"; del.style.background = ""; }, 2500);
+      }
+    });
+    row.appendChild(info);
+    row.appendChild(play);
+    row.appendChild(del);
+    listEl.appendChild(row);
+  }
 }
 
 let outfitColor = "#e53935";
@@ -780,6 +892,13 @@ function update(dt: number): void {
   // farming growth
   farmingTick(dt);
 
+  // autosave
+  autosaveTimer += dt;
+  if (autosaveTimer >= AUTOSAVE_EVERY) {
+    autosaveTimer = 0;
+    void saveNow("auto");
+  }
+
   // combat
   updateEnemies(dt);
 
@@ -827,16 +946,19 @@ function loop(ts: number): void {
 //  MENU WIRING
 // ============================================================
 function goMainMenu(): void {
+  void saveNow("auto");
   running = false;
   paused = false;
   showHud(false);
   overlay.classList.remove("visible");
   showScreen("screen-menu");
-  updateContinueBtn();
+  void updateContinueBtn();
 }
 
-function updateContinueBtn(): void {
-  $("btn-continue").style.display = hasSave() ? "" : "none";
+async function updateContinueBtn(): Promise<void> {
+  const metas = saveMgr ? await saveMgr.listWorlds() : [];
+  latestWorldId = metas.sort((a, b) => b.updatedAt - a.updatedAt)[0]?.id ?? null;
+  $("btn-continue").style.display = latestWorldId ? "" : "none";
 }
 
 
@@ -859,36 +981,43 @@ function lockLandscape(): void {
   } catch { /* orientation lock may be unsupported (desktop / iOS Safari) */ }
 }
 
-function init(): void {
+async function init(): Promise<void> {
   lockLandscape();
   buildDynamicUI();
+
+  // save system (IndexedDB -> localStorage -> memory) + legacy migration
+  try {
+    const store = await pickStore();
+    saveMgr = new SaveManager(store, () => {
+      try { return localStorage.getItem(LEGACY_KEY); } catch { return null; }
+    });
+    await saveMgr.migrateLegacy();
+  } catch {
+    saveMgr = null; // game still playable without saves
+  }
 
   setupControls();
 
   // menu
-  $("btn-continue").addEventListener("click", () => {
-    const s = loadGame();
-    if (s) {
-      // outfit from saved player
-      startGame(s.p, s.seed, s.time);
-    }
-  });
+  $("btn-continue").addEventListener("click", () => { void playLatestWorld(); });
   $("btn-new").addEventListener("click", () => {
     showScreen("screen-create");
     // randomize seed
     $<HTMLInputElement>("world-seed").value = String(Math.floor(Math.random() * 999999));
   });
   $("btn-load").addEventListener("click", () => {
-    const s = loadGame();
-    if (s) {
-      startGame(s.p, s.seed, s.time);
-    } else {
-      notify("ไม่มีไฟล์เซฟ", "#ff8a80");
-      showScreen("screen-menu");
-    }
+    showScreen("screen-worlds");
+    void renderWorlds();
   });
   $("btn-settings").addEventListener("click", () => notify("ตั้งค่าอยู่ระหว่างพัฒนา", "#ffd54f"));
   $("btn-credits").addEventListener("click", () => notify("🧭 SuvivalCraft — ส่วนหนึ่งของ SuvivalAcraft", "#9fb0d8"));
+
+  // worlds screen
+  $("btn-worlds-new").addEventListener("click", () => {
+    showScreen("screen-create");
+    $<HTMLInputElement>("world-seed").value = String(Math.floor(Math.random() * 999999));
+  });
+  $("btn-worlds-back").addEventListener("click", () => { showScreen("screen-menu"); void updateContinueBtn(); });
 
   // character creation
   $("btn-random-seed").addEventListener("click", () => {
@@ -901,17 +1030,14 @@ function init(): void {
       outfitColor = sw.dataset.c || "#e53935";
     });
   });
-  $("btn-start").addEventListener("click", () => { beginNewGame(); });
+  $("btn-start").addEventListener("click", () => { void beginNewGame(); });
 
   // pause overlay
   $("btn-resume").addEventListener("click", () => { closePause(); });
-  $("btn-save").addEventListener("click", () => {
-    saveGame(player, gameSeed, time);
-    notify("💾 บันทึกเกมแล้ว", "#aaf0c2");
-  });
+  $("btn-save").addEventListener("click", () => { void saveNow("manual"); });
   $("btn-mainmenu").addEventListener("click", () => { goMainMenu(); });
 
-  updateContinueBtn();
+  void updateContinueBtn();
   renderHud();
 
   // handle window resize
@@ -928,4 +1054,4 @@ function init(): void {
   requestAnimationFrame(loop);
 }
 
-init();
+init().catch((err) => { console.error("init failed", err); });

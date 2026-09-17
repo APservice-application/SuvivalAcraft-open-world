@@ -1,6 +1,6 @@
 // Building system (web) — pure logic, no DOM.
 // Maps placeable item ids <-> world tiles, with door open/close rules.
-import { T_FENCE, T_WALL, T_DOOR, T_DOOR_OPEN, T_CAMPFIRE, T_TREE, T_ROCK, T_BUSH, T_BERRY } from "./world.js";
+import { T_FENCE, T_WALL, T_DOOR, T_DOOR_OPEN, T_CAMPFIRE, T_TREE, T_ROCK, T_BUSH, T_BERRY, T_TILLED, T_CROP_0, T_CROP_1, T_CROP_2 } from "./world.js";
 
 export interface BuildableDef {
   item: string;
@@ -51,6 +51,7 @@ export function occupiedTile(t: number): boolean {
   switch (t) {
     case T_FENCE: case T_WALL: case T_DOOR: case T_DOOR_OPEN: case T_CAMPFIRE:
     case T_TREE: case T_ROCK: case T_BUSH: case T_BERRY:
+    case T_TILLED: case T_CROP_0: case T_CROP_1: case T_CROP_2:
       return true;
     default:
       return false;

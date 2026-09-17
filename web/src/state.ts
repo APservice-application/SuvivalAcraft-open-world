@@ -217,6 +217,8 @@ export function hasSave(): boolean {
   }
 }
 
+// NOTE: ระบบบันทึกย้ายไปที่ web/src/saves.ts (multi-world v2 + IndexedDB + migration จาก v1)
+
 export function xpNeed(p: PlayerState): number {
   return p.level * 100;
 }

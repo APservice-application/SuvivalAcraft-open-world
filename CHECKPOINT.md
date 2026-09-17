@@ -40,10 +40,9 @@ Engine แยกออกจาก Renderer (game/ = logic Engine, web/ = Render
 
 # CURRENT WORK
 
-Task: 09.x Building UI + Farming UI + 15 Local Save (IndexedDB)
-Owner: Arena Agent
-Status: IN_PROGRESS (claimed 2026-09-17)
-Plan: (1) Building UI place/break fence/wall/door/campfire → (2) Farming UI plant/grow/harvest → (3) Local Save IndexedDB + world select + autosave + v1 migration. แต่ละงานแยก checkpoint commit + tests ผ่านก่อน commit
+Task: (ว่าง — รอเลือกงานถัดไปจาก REMAINING)
+Owner: -
+Status: AVAILABLE
 
 ---
 
@@ -80,13 +79,13 @@ Plan: (1) Building UI place/break fence/wall/door/campfire → (2) Farming UI pl
 
 # LAST COMPLETED
 
-CP-006 Farming UI (web): ปลูกเมล็ด/โต 3 ระยะ/เก็บเกี่ยว + เควสเก็บเกี่ยว (ก่อนหน้า: CP-005 Building UI)
+CP-007 Local Save (IndexedDB) + world select + autosave + v1 migration (ก่อนหน้า: CP-006 Farming UI, CP-005 Building UI)
 
 ---
 
 # NEXT ACTION
 
-Local Save (IndexedDB) + world select UI + autosave + v1 migration
+ตัวเลือกถัดไป: 14 World Events / 16 LAN Multiplayer / เพิ่ม content (อ้างงาน REMAINING ด้านล่าง)
 
 ---
 
@@ -149,3 +148,9 @@ Task: Farming UI (web) — plant/grow/harvest
 Status: DONE
 Evidence: web/src/farming.ts (pure, stage จาก gameSeconds) + main.ts (plantSeed/farmingTick/harvestCrop + quest harvest_crop + seed จาก berry 40%); tests/web-farming.test.ts (10 tests); suite 79/79 PASS; check PASS; web typecheck PASS; vite build PASS
 Commit: (commit ถัดจาก CP-006)
+
+## CP-007
+Task: 15 Local Save (IndexedDB) + G7 Save UI
+Status: DONE
+Evidence: web/src/saves.ts (KVStore: IndexedDB/localStorage/memory + SaveManager + migrateV1 จาก v1) + main.ts (multi-world create/play/delete + autosave 30s + save ตอน pause/ออกเมนู) + index.html (หน้า "โลกของฉัน" + ลบแบบยืนยัน 2 จังหวะ); tests/web-saves.test.ts (9 tests); suite 88/88 PASS; check PASS; web typecheck PASS; vite build PASS; content:validate PASS
+Commit: (commit ถัดจาก CP-007)

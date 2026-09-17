@@ -29,6 +29,13 @@
       .swatch { width: 40px; height: 40px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; }
       .swatch.sel { border-color: #fff; }
 
+      /* ---- WORLDS LIST ---- */
+      #worlds-list { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow: auto; margin: 10px 0; }
+      .world-row { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 10px 12px; }
+      .world-info { flex: 1; min-width: 0; font-size: 14px; color: #ecf0ff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .world-play { width: auto; margin: 0; padding: 9px 12px; font-size: 13px; flex: 0 0 auto; }
+      .world-del { width: auto; margin: 0; padding: 9px 12px; font-size: 13px; flex: 0 0 auto; background: rgba(160,40,40,.5); }
+
       /* ---- IN-GAME HUD ---- */
       #hud { position: absolute; inset: 0; z-index: 5; display: none; }
       #hud.playing { display: block; }
@@ -91,9 +98,20 @@
           <div class="logo"><h1>🧭 SuvivalCraft</h1><p>Survival Open World</p></div>
           <button class="btn primary" id="btn-continue">Continue</button>
           <button class="btn" id="btn-new">New Game</button>
-          <button class="btn" id="btn-load">Load Game</button>
+          <button class="btn" id="btn-load">🌍 โลกของฉัน</button>
           <button class="btn" id="btn-settings">Settings</button>
           <button class="btn" id="btn-credits">Credits</button>
+        </div>
+      </div>
+
+      <!-- Worlds List -->
+      <div id="screen-worlds" class="screen">
+        <div class="menu-card" style="width:min(94vw,520px)">
+          <h1 style="text-align:center;font-size:20px;margin:0 0 6px">🌍 โลกของฉัน</h1>
+          <p style="text-align:center;color:#9fb0d8;font-size:12px;margin:0">บันทึกอัตโนมัติทุก 30 วินาที</p>
+          <div id="worlds-list"></div>
+          <button class="btn primary" id="btn-worlds-new">+ สร้างโลกใหม่</button>
+          <button class="btn" id="btn-worlds-back">กลับ</button>
         </div>
       </div>
 
