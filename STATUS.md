@@ -103,3 +103,6 @@
 - [x] 2026-09-17 (รอบ 3 ต่อ) — CP-008..CP-014: World Events / Temperature / Durability / Content Pack+เนื้อหา / Farming ขยาย / Quest chain+Audio / Co-op / CI — Arena Agent — **MASTER TASK LIST 17/17 DONE, tests 141/141**
 
 - [x] 2026-09-17 (รอบ 4) — CP-015..CP-018: co-op world sync / ws relay ข้ามเครื่อง / pixel icons / เพลงสังเคราะห์ — Arena Agent — tests 152/152
+
+- [x] 2026-09-18 (รอบ 5) — CP-019: Equipment slots 4 ช่อง (head/chest/legs/acc) + พาเนล 🎒กระเป๋า 24 ช่อง / 👤ตัวละคร / 📜ภารกิจ (คีย์ I/C/Q/Esc) + เกราะชุดใหม่ 3 ชิ้น + durability + migration เซฟเก่า — Arena Agent
+- [x] 2026-09-18 (รอบ 5) — CP-020: NPC หมู่บ้าน 3 คน (ผู้เฒ่า/พ่อค้า/ช่างตีเหล็ก) + บทสนทนาเลือกตอบ + ร้านค้าซื้อ-ขาย + ซ่อมอุปกรณ์ด้วยทอง — Arena Agent — tests 168/168 + smoke PASS, ขึ้น Pages แล้ว
