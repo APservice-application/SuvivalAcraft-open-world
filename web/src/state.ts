@@ -22,6 +22,14 @@ export const ITEMS: Record<string, ItemDef> = {
   torch: { id: "torch", name: "คบเพลิง", category: "misc", icon: "🔥", stack: 20 },
   meat_raw: { id: "meat_raw", name: "เนื้อดิบ", category: "food", icon: "🥩", stack: 20, food: 4 },
   meat_cooked: { id: "meat_cooked", name: "เนื้อสุก", category: "food", icon: "🍖", stack: 20, food: 9, heal: 2 },
+  // placeable buildings
+  fence: { id: "fence", name: "รั้วไม้", category: "misc", icon: "🚧", stack: 50 },
+  wall: { id: "wall", name: "กำแพงหิน", category: "misc", icon: "🧱", stack: 50 },
+  door: { id: "door", name: "ประตูไม้", category: "misc", icon: "🚪", stack: 20 },
+  campfire: { id: "campfire", name: "แคมป์ไฟ", category: "misc", icon: "🔥", stack: 10 },
+  // farming
+  wheat_seed: { id: "wheat_seed", name: "เมล็ดพืช", category: "misc", icon: "🌱", stack: 30 },
+  wheat: { id: "wheat", name: "ข้าว", category: "food", icon: "🌾", stack: 30, food: 3 },
 };
 
 export interface Slot { item: string; count: number; }
@@ -42,6 +50,11 @@ export const RECIPES: Recipe[] = [
   { id: "stone_sword", name: "ดาบหิน", icon: "⚔️", out: { item: "stone_sword", count: 1 }, needs: [{ item: "stone", count: 2 }, { item: "wood", count: 2 }] },
   { id: "torch", name: "คบเพลิง", icon: "🔥", out: { item: "torch", count: 4 }, needs: [{ item: "wood", count: 1 }, { item: "fiber", count: 1 }] },
   { id: "meat_cooked", name: "ย่างเนื้อ", icon: "🍖", out: { item: "meat_cooked", count: 1 }, needs: [{ item: "meat_raw", count: 1 }], station: "campfire" },
+  // building
+  { id: "fence", name: "รั้วไม้", icon: "🚧", out: { item: "fence", count: 2 }, needs: [{ item: "wood", count: 2 }] },
+  { id: "wall", name: "กำแพงหิน", icon: "🧱", out: { item: "wall", count: 1 }, needs: [{ item: "stone", count: 4 }] },
+  { id: "door", name: "ประตูไม้", icon: "🚪", out: { item: "door", count: 1 }, needs: [{ item: "wood", count: 4 }] },
+  { id: "campfire", name: "แคมป์ไฟ", icon: "🔥", out: { item: "campfire", count: 1 }, needs: [{ item: "wood", count: 3 }, { item: "stone", count: 2 }] },
 ];
 
 export interface PlayerState {

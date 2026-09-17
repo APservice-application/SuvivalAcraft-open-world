@@ -80,13 +80,13 @@ Plan: (1) Building UI place/break fence/wall/door/campfire → (2) Farming UI pl
 
 # LAST COMPLETED
 
-12.x Day/Night + 13.x Weather + 10.x AI integrated into web game + sprite atlas
+CP-005 Building UI (web): วาง/ทุบ fence/wall/door/campfire + เปิด-ปิดประตู + สูตรคราฟต์ใหม่ 4 สูตร (ก่อนหน้า: 12.x Day/Night + 13.x Weather + 10.x AI in web + sprite atlas)
 
 ---
 
 # NEXT ACTION
 
-Building UI (place wall/door/fence), farming UI (plant/harvest), then Local Save (IndexedDB)
+Farming UI (plant/grow/harvest) → Local Save (IndexedDB) + world select + autosave
 
 ---
 
@@ -137,3 +137,9 @@ Task: 08 Crafting recipes + 09 Building (fence/wall/door) + sprites + data sync
 Status: DONE
 Evidence: items/blocks/recipes registries + data JSON aligned; content:validate PASS; tests 58/58; web build PASS
 Commit: (นี้)
+
+## CP-005
+Task: 09.x Building UI (web)
+Status: DONE
+Evidence: web/src/building.ts (pure) + world.ts edits system + state.ts items/recipes ใหม่ 4 + main.ts place/break/door-toggle; tests/web-building.test.ts (11 tests); suite 69/69 PASS; npm run check PASS; web typecheck PASS; vite build PASS
+Commit: (commit ถัดจาก CP-005)

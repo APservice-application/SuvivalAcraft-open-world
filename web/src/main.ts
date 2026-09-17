@@ -1,10 +1,11 @@
 // SuvivalAcraft Open World — main game wiring (mobile-first, touch-first)
-import { World, TILE_SIZE, T_WATER, T_STONE, T_ROCK, T_TREE, T_BUSH, T_BERRY, T_GRASS, T_GRASS_ALT, T_DIRT, T_SAND, T_FLOOR, T_PATH, tileName } from "./world.js";
+import { World, TILE_SIZE, T_WATER, T_STONE, T_ROCK, T_TREE, T_BUSH, T_BERRY, T_GRASS, T_GRASS_ALT, T_DIRT, T_SAND, T_FLOOR, T_PATH, T_FENCE, T_WALL, T_DOOR, T_DOOR_OPEN, T_CAMPFIRE, T_TILLED, T_CROP_0, T_CROP_1, T_CROP_2, tileName } from "./world.js";
 import {
   PlayerState, newPlayer, addItem, removeItem, countItems, canCraft, craftRecipe,
   useItem, equippedDamage, survivalTick, addXp, saveGame, loadGame, hasSave, xpNeed,
   ITEMS, RECIPES, Slot,
 } from "./state.js";
+import { buildableByItem, isDoorTile, toggledDoor, itemForBuildingTile, occupiedTile } from "./building.js";
 import { TouchJoystick, KeyboardInput, setupButton } from "./controls.js";
 
 // ---------- DOM ----------
@@ -32,6 +33,9 @@ let paused = false;
 let selectedSlot = -1;
 let dodgeUntil = 0;
 let attackCooldown = 0;
+
+// facing direction (unit-ish grid direction of last movement)
+let faceX = 1, faceZ = 0;
 
 interface Enemy { x: number; y: number; hp: number; maxHp: number; dmg: number; kind: string; aggro: boolean; }
 let enemies: Enemy[] = [];
@@ -208,6 +212,15 @@ function drawTileScreenSpace(sx: number, sy: number, id: number): void {
     case T_BERRY: ctx.fillStyle = "#b03d7a"; break;
     case T_FLOOR: ctx.fillStyle = "#a8845a"; break;
     case T_PATH: ctx.fillStyle = "#9aa0ac"; break;
+    case T_FENCE: ctx.fillStyle = "#7a5a33"; break;
+    case T_WALL: ctx.fillStyle = "#8d949e"; break;
+    case T_DOOR: ctx.fillStyle = "#6b4a26"; break;
+    case T_DOOR_OPEN: ctx.fillStyle = "#3f8f43"; break;
+    case T_CAMPFIRE: ctx.fillStyle = "#3a3f4a"; break;
+    case T_TILLED: ctx.fillStyle = "#5e4626"; break;
+    case T_CROP_0: ctx.fillStyle = "#5e4626"; break;
+    case T_CROP_1: ctx.fillStyle = "#5e4626"; break;
+    case T_CROP_2: ctx.fillStyle = "#5e4626"; break;
     default: ctx.fillStyle = "#3f8f43";
   }
   ctx.fillRect(sx, sy, TILE_SIZE, TILE_SIZE);
@@ -217,6 +230,66 @@ function drawTileScreenSpace(sx: number, sy: number, id: number): void {
     ctx.beginPath();
     ctx.arc(sx + 8, sy + 8, 5, 0, Math.PI * 2);
     ctx.fill();
+  }
+  // placed buildings / crops details
+  if (id === T_FENCE) {
+    ctx.fillStyle = "#9a7440";
+    ctx.fillRect(sx + 1, sy + 6, 14, 2);
+    ctx.fillRect(sx + 1, sy + 10, 14, 2);
+    ctx.fillRect(sx + 2, sy + 3, 3, 11);
+    ctx.fillRect(sx + 11, sy + 3, 3, 11);
+  } else if (id === T_WALL) {
+    ctx.fillStyle = "#7b8290";
+    ctx.fillRect(sx + 1, sy + 1, 14, 3);
+    ctx.fillRect(sx + 1, sy + 8, 14, 3);
+    ctx.fillStyle = "#a2a9b5";
+    ctx.fillRect(sx + 1, sy + 5, 7, 2);
+    ctx.fillRect(sx + 8, sy + 12, 7, 2);
+  } else if (id === T_DOOR) {
+    ctx.fillStyle = "#8a6435";
+    ctx.fillRect(sx + 3, sy + 1, 10, 14);
+    ctx.fillStyle = "#f5d76e";
+    ctx.fillRect(sx + 10, sy + 7, 2, 2);
+  } else if (id === T_DOOR_OPEN) {
+    ctx.fillStyle = "#8a6435";
+    ctx.fillRect(sx, sy + 1, 4, 14);
+  } else if (id === T_CAMPFIRE) {
+    ctx.fillStyle = "#5a4632";
+    ctx.fillRect(sx + 2, sy + 10, 12, 3);
+    ctx.fillRect(sx + 5, sy + 12, 6, 2);
+    ctx.fillStyle = "#ff9a3c";
+    ctx.beginPath();
+    ctx.moveTo(sx + 8, sy + 2);
+    ctx.lineTo(sx + 12, sy + 10);
+    ctx.lineTo(sx + 4, sy + 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#ffe082";
+    ctx.beginPath();
+    ctx.moveTo(sx + 8, sy + 5);
+    ctx.lineTo(sx + 10, sy + 10);
+    ctx.lineTo(sx + 6, sy + 10);
+    ctx.closePath();
+    ctx.fill();
+  } else if (id === T_TILLED) {
+    ctx.fillStyle = "#4a3820";
+    ctx.fillRect(sx + 1, sy + 4, 14, 2);
+    ctx.fillRect(sx + 1, sy + 9, 14, 2);
+  } else if (id === T_CROP_0) {
+    ctx.fillStyle = "#69b06a";
+    ctx.fillRect(sx + 7, sy + 9, 2, 5);
+  } else if (id === T_CROP_1) {
+    ctx.fillStyle = "#4f9e50";
+    ctx.fillRect(sx + 7, sy + 4, 2, 10);
+    ctx.fillRect(sx + 4, sy + 7, 3, 2);
+    ctx.fillRect(sx + 9, sy + 6, 3, 2);
+  } else if (id === T_CROP_2) {
+    ctx.fillStyle = "#c9a53c";
+    ctx.fillRect(sx + 6, sy + 2, 4, 5);
+    ctx.fillStyle = "#4f9e50";
+    ctx.fillRect(sx + 7, sy + 6, 2, 8);
+    ctx.fillRect(sx + 3, sy + 9, 4, 2);
+    ctx.fillRect(sx + 9, sy + 11, 4, 2);
   }
 }
 
@@ -395,17 +468,49 @@ function addXpLevelCheck(): boolean {
 // ============================================================
 //  ACTION HANDLERS
 // ============================================================
+function facingTile(): { x: number; z: number } {
+  return { x: Math.round(player.pos.x) + faceX, z: Math.round(player.pos.y) + faceZ };
+}
+
 function interact(): void {
-  const t = world.tileAt(Math.round(player.pos.x), Math.round(player.pos.y));
-  const g = world.gather(Math.round(player.pos.x), Math.round(player.pos.y));
+  const px = Math.round(player.pos.x), pz = Math.round(player.pos.y);
+  const ft = facingTile();
+
+  // 1) facing tile: door toggle / break placed building / harvest crop
+  const ftTile = world.tileAt(ft.x, ft.z);
+  if (isDoorTile(ftTile)) {
+    const nt = toggledDoor(ftTile);
+    if (nt !== undefined) {
+      world.setEdit(ft.x, ft.z, nt);
+      notify(nt === T_DOOR_OPEN ? "🚪 เปิดประตู" : "🚪 ปิดประตู", "#ffd54f");
+    }
+    return;
+  }
+  const breakItem = itemForBuildingTile(ftTile);
+  if (breakItem) {
+    world.removeEdit(ft.x, ft.z);
+    addItem(player, breakItem, 1);
+    notify(`ทุบ ${ITEMS[breakItem]?.icon} ${ITEMS[breakItem]?.name} ได้คืน 1`, "#ffd54f");
+    renderHud();
+    return;
+  }
+
+  // 2) standing tile: natural gather
+  const g = world.gather(px, pz);
   if (g) {
-    world.consume(Math.round(player.pos.x), Math.round(player.pos.y));
+    world.consume(px, pz);
     let mult = 1;
     const eq = player.equip ? ITEMS[player.equip] : null;
     if (eq?.tool === "axe" && g.item === "wood") mult = 2;
     if (eq?.tool === "pickaxe" && g.item === "stone") mult = 2;
     addItem(player, g.item, g.count * mult);
-    notify(`+${g.count * mult} ${ITEMS[g.item]?.icon} ${ITEMS[g.item]?.name}`, "#aaf0c2");
+    // chance of seeds when picking berries (farming starter)
+    if (g.item === "berry" && Math.random() < 0.4) {
+      addItem(player, "wheat_seed", 1);
+      notify(`+${g.count * mult} ${ITEMS[g.item]?.icon} ${ITEMS[g.item]?.name} + 🌱 เมล็ดพืช`, "#aaf0c2");
+    } else {
+      notify(`+${g.count * mult} ${ITEMS[g.item]?.icon} ${ITEMS[g.item]?.name}`, "#aaf0c2");
+    }
     if (g.item === "wood") questProgress("gather_wood", g.count * mult);
     if (g.item === "fiber" || g.item === "berry") addXp(player, 3);
     renderHud();
@@ -427,7 +532,8 @@ function questProgress(id: string, amt: number): void {
 
 function quickUse(slotIdx: number): void {
   const s = player.inv[slotIdx];
-  if (!s) return;
+  selectedSlot = slotIdx;
+  if (!s) { renderHud(); renderQuickBar(); return; }
   const def = ITEMS[s.item];
   if (def?.category === "food") {
     useItem(player, slotIdx);
@@ -436,11 +542,54 @@ function quickUse(slotIdx: number): void {
     useItem(player, slotIdx);
     player.equip = s.item;
     notify(`ถือ ${def.icon} ${def.name}`, "#ffd54f");
-  } else {
-    selectedSlot = slotIdx;
   }
   renderHud();
   renderQuickBar();
+}
+
+// ============================================================
+//  BUILD / PLACE
+// ============================================================
+/** Place the selected placeable item at the facing tile. */
+function placeBuilding(itemId: string): boolean {
+  const def = buildableByItem(itemId);
+  if (!def) return false;
+  const ft = facingTile();
+  const px = Math.round(player.pos.x), pz = Math.round(player.pos.y);
+  if (ft.x === px && ft.z === pz) { notify("วางไม่ได้: ตรงตัวคุณ", "#ff8a80"); return false; }
+  const t = world.tileAt(ft.x, ft.z);
+  if (t === T_WATER) { notify("วางบนน้ำไม่ได้", "#ff8a80"); return false; }
+  if (occupiedTile(t)) { notify("วางไม่ได้: มีสิ่งกีดขวาง", "#ff8a80"); return false; }
+  if (!removeItem(player, itemId, 1)) { notify("ของไม่พอ", "#ff8a80"); return false; }
+  world.setEdit(ft.x, ft.z, def.tile);
+  notify(`วาง ${def.icon} ${def.name}`, "#aaf0c2");
+  renderHud();
+  return true;
+}
+
+/** Context action for the USE button, based on the selected slot. */
+function useSelected(): void {
+  if (selectedSlot < 0) return;
+  const s = player.inv[selectedSlot];
+  if (!s) return;
+  if (buildableByItem(s.item)) {
+    placeBuilding(s.item);
+    return;
+  }
+  quickUse(selectedSlot);
+}
+
+/** Label for the USE button given current selection. */
+function useButtonLabel(): string {
+  if (selectedSlot < 0) return "";
+  const s = player.inv[selectedSlot];
+  if (!s) return "";
+  const b = buildableByItem(s.item);
+  if (b) return `${b.icon}<br/><span style="font-size:9px">วาง</span>`;
+  const def = ITEMS[s.item];
+  if (def?.category === "food") return `${def.icon}<br/><span style="font-size:9px">กิน</span>`;
+  if (def?.category === "tool" || def?.category === "weapon") return `${def.icon}<br/><span style="font-size:9px">ถือ</span>`;
+  return `${def?.icon ?? ""}<br/><span style="font-size:9px">ใช้</span>`;
 }
 
 // ============================================================
@@ -492,8 +641,8 @@ function setupControls(): void {
   setupButton($("btn-interact"), () => { interact(); }, () => {});
   // dodge
   setupButton($("btn-dodge"), () => { dodgeUntil = performance.now() / 1000 + 0.35; });
-  // use
-  setupButton($("btn-use"), () => { if (selectedSlot >= 0) quickUse(selectedSlot); }, () => {});
+  // use (context: place building / eat / equip)
+  setupButton($("btn-use"), () => { useSelected(); }, () => {});
 
   setupButton($("menu-btn"), () => { openPause(); }, () => {});
 }
@@ -530,6 +679,9 @@ function update(dt: number): void {
   const mag = joy.magnitude || kb.magnitude;
   const speed = 90 * (dodgeMove() ? 3 : 1);
   if (mag > 0) {
+    // remember facing (dominant axis) for build/plant/interact targeting
+    if (Math.abs(dx) >= Math.abs(dy)) { faceX = dx > 0 ? 1 : -1; faceZ = 0; }
+    else { faceX = 0; faceZ = dy > 0 ? 1 : -1; }
     const nx = player.pos.x + dx * speed * dt;
     const ny = player.pos.y + dy * speed * dt;
     if (world.isWalkable(Math.round(nx), Math.round(player.pos.y))) player.pos.x = nx;
@@ -556,11 +708,21 @@ function update(dt: number): void {
   // combat
   updateEnemies(dt);
 
-  // context: show interact button if gatherable tile nearby
-  const tile = world.tileAt(Math.round(player.pos.x), Math.round(player.pos.y));
-  const gatherable = world.gather(Math.round(player.pos.x), Math.round(player.pos.y)) !== null;
-  $("btn-interact").style.display = gatherable ? "" : "none";
-  $("btn-use").style.display = selectedSlot >= 0 ? "" : "none";
+  // context: show interact button if gatherable tile nearby OR facing building/door
+  const px = Math.round(player.pos.x), pz = Math.round(player.pos.y);
+  const gatherable = world.gather(px, pz) !== null;
+  const ft = facingTile();
+  const ftTile = world.tileAt(ft.x, ft.z);
+  const facingInteractive = gatherable === false && (itemForBuildingTile(ftTile) !== undefined || isDoorTile(ftTile));
+  $("btn-interact").style.display = (gatherable || facingInteractive) ? "" : "none";
+  // use button follows selection, label reflects action
+  const useEl = $("btn-use");
+  const showUse = selectedSlot >= 0 && !!player.inv[selectedSlot];
+  useEl.style.display = showUse ? "" : "none";
+  if (showUse) {
+    const lbl = useButtonLabel();
+    if (useEl.dataset.lbl !== lbl) { useEl.innerHTML = lbl; useEl.dataset.lbl = lbl; }
+  }
 }
 
 // ============================================================

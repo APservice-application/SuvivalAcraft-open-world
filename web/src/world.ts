@@ -21,6 +21,16 @@ export const T_BUSH = 8;
 export const T_BERRY = 9;
 export const T_FLOOR = 10;
 export const T_PATH = 11;
+// player-placed / farm tiles
+export const T_FENCE = 12;
+export const T_WALL = 13;
+export const T_DOOR = 14;
+export const T_DOOR_OPEN = 15;
+export const T_CAMPFIRE = 16;
+export const T_TILLED = 17;
+export const T_CROP_0 = 18;
+export const T_CROP_1 = 19;
+export const T_CROP_2 = 20; // mature
 
 const CHUNK = 24;
 
@@ -48,6 +58,8 @@ function chunkOf(x: number, z: number): TPoint {
 
 export class World {
   seed: number;
+  /** player edits: key "x,z" -> tile id (overrides generated terrain) */
+  private edits = new Map<string, number>();
   private chunks = new Map<string, TChunk>();
 
   constructor(seed: number) {
@@ -109,11 +121,42 @@ export class World {
   }
 
   tileAt(x: number, z: number): number {
+    const e = this.edits.get(`${x},${z}`);
+    if (e !== undefined) return e;
     const c = chunkOf(x, z);
     const chunk = this.ensureChunk(c.x, c.z);
     const lx = ((x % CHUNK) + CHUNK) % CHUNK;
     const lz = ((z % CHUNK) + CHUNK) % CHUNK;
     return chunk.tiles[lz * CHUNK + lx] ?? 0;
+  }
+
+  /** Player-placed edit: overrides terrain at (x,z). tile = base tile removes the edit. */
+  setEdit(x: number, z: number, tile: number): void {
+    this.edits.set(`${x},${z}`, tile);
+  }
+
+  removeEdit(x: number, z: number): void {
+    this.edits.delete(`${x},${z}`);
+  }
+
+  hasEdit(x: number, z: number): boolean {
+    return this.edits.has(`${x},${z}`);
+  }
+
+  /** Serialize edits for save: [x, z, tile][] */
+  getEdits(): [number, number, number][] {
+    const out: [number, number, number][] = [];
+    for (const [k, t] of this.edits) {
+      const [xs, zs] = k.split(",");
+      out.push([Number(xs), Number(zs), t]);
+    }
+    return out;
+  }
+
+  /** Restore edits from a save. */
+  setEdits(list: [number, number, number][]): void {
+    this.edits.clear();
+    for (const [x, z, t] of list) this.edits.set(`${x},${z}`, t);
   }
 
   /** Returns gathered yield for breaking resource tile, or 0. */
@@ -139,6 +182,7 @@ export class World {
 
   isWalkable(x: number, z: number): boolean {
     const t = this.tileAt(x, z);
-    return t !== T_WATER && t !== T_STONE && t !== T_ROCK && t !== T_TREE;
+    return t !== T_WATER && t !== T_STONE && t !== T_ROCK && t !== T_TREE
+      && t !== T_FENCE && t !== T_WALL && t !== T_DOOR && t !== T_CAMPFIRE;
   }
 }
