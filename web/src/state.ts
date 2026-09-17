@@ -1,12 +1,16 @@
 export interface ItemDef {
   id: string;
   name: string;
-  category: "resource" | "food" | "tool" | "weapon" | "misc";
+  category: "resource" | "food" | "tool" | "weapon" | "armor" | "misc";
   icon: string;
   food?: number;
   heal?: number;
   damage?: number;
+  /** ลดดาเมจที่ได้รับ (เกราะ) */
+  defense?: number;
   tool?: "axe" | "pickaxe" | "knife";
+  /** ความทนทานสูงสุด (งานที่ 07) — ของที่มี maxDur จะมี slot.dur ติดตาม */
+  maxDur?: number;
   stack: number;
 }
 
@@ -15,10 +19,10 @@ export const ITEMS: Record<string, ItemDef> = {
   stone: { id: "stone", name: "หิน", category: "resource", icon: "🪨", stack: 50 },
   fiber: { id: "fiber", name: "เส้นใย", category: "resource", icon: "🧵", stack: 50 },
   berry: { id: "berry", name: "เบอร์รี่", category: "food", icon: "🫐", stack: 20, food: 5, heal: 1 },
-  wood_axe: { id: "wood_axe", name: "ขวานไม้", category: "tool", icon: "🪓", stack: 1, tool: "axe", damage: 3 },
-  stone_axe: { id: "stone_axe", name: "ขวานหิน", category: "tool", icon: "⛏️", stack: 1, tool: "axe", damage: 5 },
-  wood_sword: { id: "wood_sword", name: "ดาบไม้", category: "weapon", icon: "🗡️", stack: 1, damage: 4 },
-  stone_sword: { id: "stone_sword", name: "ดาบหิน", category: "weapon", icon: "⚔️", stack: 1, damage: 7 },
+  wood_axe: { id: "wood_axe", name: "ขวานไม้", category: "tool", icon: "🪓", stack: 1, tool: "axe", damage: 3, maxDur: 40 },
+  stone_axe: { id: "stone_axe", name: "ขวานหิน", category: "tool", icon: "⛏️", stack: 1, tool: "axe", damage: 5, maxDur: 70 },
+  wood_sword: { id: "wood_sword", name: "ดาบไม้", category: "weapon", icon: "🗡️", stack: 1, damage: 4, maxDur: 35 },
+  stone_sword: { id: "stone_sword", name: "ดาบหิน", category: "weapon", icon: "⚔️", stack: 1, damage: 7, maxDur: 60 },
   torch: { id: "torch", name: "คบเพลิง", category: "misc", icon: "🔥", stack: 20 },
   meat_raw: { id: "meat_raw", name: "เนื้อดิบ", category: "food", icon: "🥩", stack: 20, food: 4 },
   meat_cooked: { id: "meat_cooked", name: "เนื้อสุก", category: "food", icon: "🍖", stack: 20, food: 9, heal: 2 },
@@ -32,7 +36,7 @@ export const ITEMS: Record<string, ItemDef> = {
   wheat: { id: "wheat", name: "ข้าว", category: "food", icon: "🌾", stack: 30, food: 3 },
 };
 
-export interface Slot { item: string; count: number; }
+export interface Slot { item: string; count: number; /** ความทนทานคงเหลือ (เฉพาะของที่มี maxDur) */ dur?: number; }
 
 export interface Recipe {
   id: string;
@@ -66,6 +70,8 @@ export interface PlayerState {
   maxHp: number;
   hunger: number;
   maxHunger: number;
+  /** ความอบอุ่น 0..100 (งานที่ 06 Temperature) */
+  warmth: number;
   stamina: number;
   maxStamina: number;
   gold: number;
@@ -84,6 +90,7 @@ export function newPlayer(name: string, outfit: string, x: number, y: number): P
     maxHp: 20,
     hunger: 20,
     maxHunger: 20,
+    warmth: 50,
     stamina: 20,
     maxStamina: 20,
     gold: 10,
@@ -142,7 +149,13 @@ export function canCraft(recipe: Recipe, p: PlayerState): boolean {
 export function craftRecipe(recipe: Recipe, p: PlayerState): boolean {
   if (!canCraft(recipe, p)) return false;
   for (const need of recipe.needs) removeItem(p, need.item, need.count);
-  addItem(p, recipe.out.item, recipe.out.count);
+  const def = ITEMS[recipe.out.item];
+  if (def?.maxDur && recipe.out.count === 1) {
+    // ของมีความทนทาน: ใส่ slot ใหม่พร้อม dur เต็ม
+    p.inv.push({ item: recipe.out.item, count: 1, dur: def.maxDur });
+  } else {
+    addItem(p, recipe.out.item, recipe.out.count);
+  }
   return true;
 }
 
@@ -155,7 +168,7 @@ export function useItem(p: PlayerState, slotIndex: number): void {
     p.hunger = Math.min(p.maxHunger, p.hunger + (def.food ?? 0));
     p.hp = Math.min(p.maxHp, p.hp + (def.heal ?? 0));
     removeItem(p, s.item, 1);
-  } else if (def.category === "tool" || def.category === "weapon") {
+  } else if (def.category === "tool" || def.category === "weapon" || def.category === "armor") {
     p.equip = s.item;
   }
 }
@@ -163,6 +176,17 @@ export function useItem(p: PlayerState, slotIndex: number): void {
 export function equippedDamage(p: PlayerState): number {
   if (p.equip && ITEMS[p.equip]) return ITEMS[p.equip]!.damage ?? 1;
   return 1;
+}
+
+/** พลังป้องกันจากเกราะที่สวมอยู่ (งานเนื้อหาใหม่) */
+export function equippedDefense(p: PlayerState): number {
+  if (p.equip && ITEMS[p.equip]) return ITEMS[p.equip]!.defense ?? 0;
+  return 0;
+}
+
+/** คำนวณดาเมจที่ได้รับหลังหักเกราะ (ขั้นต่ำ 1) */
+export function damageAfterDefense(raw: number, p: PlayerState): number {
+  return Math.max(1, raw - equippedDefense(p));
 }
 
 export function survivalTick(p: PlayerState, dt: number): void {

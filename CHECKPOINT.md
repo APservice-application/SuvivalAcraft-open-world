@@ -79,7 +79,7 @@ Status: IN_PROGRESS (claimed 2026-09-17 รอบ 2) — ทำเป็น CP-0
 
 # LAST COMPLETED
 
-CP-008 World Events (task 14) — migration/storm/wildfire/merchant/camp (ก่อนหน้า: CP-007 Save, CP-006 Farming, CP-005 Building)
+CP-009 Temperature + Durability + Inventory sort (task 06/07) (ก่อนหน้า: CP-008 World Events)
 
 ---
 
@@ -160,3 +160,9 @@ Task: 14 World Events (web)
 Status: DONE
 Evidence: web/src/events.ts (scheduler ล้วน + weighted pick + minDay) + main.ts (event visuals ฝน/ไฟ, migration spawn, merchant พร้อมหน้าแลกของ 5 รายการ, camp เก็บของเดินเก็บได้, banner นับถอยหลัง, gold chip); tests/web-events.test.ts (10 tests); suite 98/98 PASS; check PASS; web typecheck PASS; vite build PASS
 Commit: (commit ถัดจาก CP-008)
+
+## CP-009
+Task: 06 Temperature + 07 Inventory durability/metadata + ปุ่มจัดเรียง
+Status: DONE
+Evidence: web/src/climate.ts (ambient ตามเวลา/พายุ/ไฟป่า + warmth drain/regen/heat source) + web/src/inventory.ts (sortSlots merge+tie-break, wearSlot) + state.ts (Slot.dur, ItemDef.maxDur, PlayerState.warmth, craftRecipe แถม dur เต็ม, equippedDefense/damageAfterDefense, สวม armor) + main.ts (temperature tick + หนาว/ร้อนลด HP, อาวุธ/เครื่องมือสึกจนแตก, เกราะลดดาเมจ, ปุ่ม ↕ จัดเรียง, HUD 🌡/🪙); tests/web-climate-inventory.test.ts (12 tests); suite 110/110 PASS; check PASS; web typecheck PASS; vite build PASS
+Commit: (commit ถัดจาก CP-009)

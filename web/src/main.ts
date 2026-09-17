@@ -2,13 +2,15 @@
 import { World, TILE_SIZE, T_WATER, T_STONE, T_ROCK, T_TREE, T_BUSH, T_BERRY, T_GRASS, T_GRASS_ALT, T_DIRT, T_SAND, T_FLOOR, T_PATH, T_FENCE, T_WALL, T_DOOR, T_DOOR_OPEN, T_CAMPFIRE, T_TILLED, T_CROP_0, T_CROP_1, T_CROP_2, tileName } from "./world.js";
 import {
   PlayerState, newPlayer, addItem, removeItem, countItems, canCraft, craftRecipe,
-  useItem, equippedDamage, survivalTick, addXp, xpNeed,
+  useItem, equippedDamage, damageAfterDefense, survivalTick, addXp, xpNeed,
   ITEMS, RECIPES, Slot,
 } from "./state.js";
 import { buildableByItem, isDoorTile, toggledDoor, itemForBuildingTile, occupiedTile } from "./building.js";
 import { FarmPlots, cropStageAt, isMatureAt, plotKey } from "./farming.js";
 import { SaveManager, pickStore, LEGACY_KEY, type WorldSaveV2, type WorldMeta } from "./saves.js";
 import { EventScheduler, eventDef, type EventKind } from "./events.js";
+import { ambientTemperature, warmthStep } from "./climate.js";
+import { sortSlots, wearSlot } from "./inventory.js";
 import { TouchJoystick, KeyboardInput, setupButton } from "./controls.js";
 
 // ---------- DOM ----------
@@ -42,6 +44,7 @@ let eventSched = new EventScheduler(45);
 let merchant: { x: number; z: number; until: number } | null = null;
 let pickups: { x: number; z: number; item: string; count: number }[] = [];
 let fireDmgAt = 0;
+let coldMsgAt = 0;
 let bannerEl: HTMLElement | null = null;
 let tradeEl: HTMLElement | null = null;
 let tradeOpen = false;
@@ -128,7 +131,10 @@ function buildDynamicUI(): void {
 
 function renderCraft(): void {
   if (!craftEl) return;
-  let html = "<div style='font-weight:700;margin-bottom:6px;color:#8fb0ff'>🔨 คราฟต์</div>";
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+    <span style="font-weight:700;color:#8fb0ff">🔨 คราฟต์</span>
+    <button data-sort style="border:1px solid rgba(143,176,255,.5);border-radius:6px;padding:3px 8px;background:rgba(143,176,255,.15);color:#8fb0ff;font-size:11px;font-weight:700">↕ จัดเรียง</button>
+  </div>`;
   for (const r of RECIPES) {
     const ok = canCraft(r, player);
     const need = r.needs.map((n) => `${ITEMS[n.item]?.icon ?? ""} ${countItems(player, n.item)}/${n.count}`).join(" · ");
@@ -141,6 +147,15 @@ function renderCraft(): void {
     </div>`;
   }
   craftEl.innerHTML = html;
+  const sortBtn = craftEl.querySelector<HTMLButtonElement>("[data-sort]");
+  if (sortBtn) {
+    sortBtn.addEventListener("click", () => {
+      player.inv = sortSlots(player.inv);
+      notify("↕ จัดเรียงกระเป๋าแล้ว", "#aaf0c2");
+      renderQuickBar();
+      renderCraft();
+    });
+  }
   craftEl.querySelectorAll<HTMLButtonElement>("[data-craft]").forEach((b) => {
     b.addEventListener("click", () => {
       const r = RECIPES.find((x) => x.id === b.dataset.craft);
@@ -214,6 +229,7 @@ function startGame(p: PlayerState, seed: number, t: number, restore?: WorldSaveV
   tradeOpen = false;
   if (tradeEl) tradeEl.style.display = "none";
   if (restore) {
+    if (player.warmth === undefined) player.warmth = 50;
     currentWorld = restore.meta;
     dayCount = restore.dayCount || 1;
     gameSeconds = restore.gameSeconds || 0;
@@ -603,7 +619,8 @@ function updateEnemies(dt: number): void {
       }
       if (dist < 1.4) {
         if (performance.now() / 1000 > (e as any).atkTimer) {
-          player.hp = Math.max(0, player.hp - e.dmg);
+          player.hp = Math.max(0, player.hp - damageAfterDefense(e.dmg, player));
+          wearEquipped(1);
           (e as any).atkTimer = performance.now() / 1000 + 1;
           notify(`${e.kind} โจมตีคุณ! -${e.dmg}`, "#ff8a80");
         }
@@ -625,6 +642,7 @@ function attack(): void {
   const dmg = equippedDamage(player) + Math.floor(Math.random() * 2);
   if (best) {
     best.hp -= dmg;
+    wearEquipped(1);
     notify(`โจมตี ${best.kind}! -${dmg}`, "#ffd54f");
     if (best.hp <= 0) {
       notify(`⚔️ กำจัด ${best.kind}! +20 XP`, "#aaf0c2");
@@ -694,6 +712,7 @@ function interact(): void {
     const eq = player.equip ? ITEMS[player.equip] : null;
     if (eq?.tool === "axe" && g.item === "wood") mult = 2;
     if (eq?.tool === "pickaxe" && g.item === "stone") mult = 2;
+    if (mult > 1) wearEquipped(1);
     addItem(player, g.item, g.count * mult);
     // chance of seeds when picking berries (farming starter)
     if (g.item === "berry" && Math.random() < 0.4) {
@@ -786,6 +805,26 @@ function useButtonLabel(): string {
   if (def?.category === "food") return `${def.icon}<br/><span style="font-size:9px">กิน</span>`;
   if (def?.category === "tool" || def?.category === "weapon") return `${def.icon}<br/><span style="font-size:9px">ถือ</span>`;
   return `${def?.icon ?? ""}<br/><span style="font-size:9px">ใช้</span>`;
+}
+
+// ============================================================
+//  DURABILITY (task 07)
+// ============================================================
+/** ลดความทนทานของของที่ถืออยู่; แตกสลายเมื่อหมด */
+function wearEquipped(amount = 1): void {
+  if (!player.equip) return;
+  const idx = player.inv.findIndex((x) => x.item === player.equip);
+  if (idx < 0) { player.equip = null; return; }
+  const slot = player.inv[idx]!;
+  if (slot.dur === undefined) return;
+  const r = wearSlot(slot, amount);
+  slot.dur = r.dur;
+  if (r.broke) {
+    player.inv.splice(idx, 1);
+    notify(`${ITEMS[slot.item]?.icon ?? ""} ${ITEMS[slot.item]?.name ?? slot.item} แตกสลาย!`, "#ff8a80");
+    player.equip = null;
+  }
+  renderQuickBar();
 }
 
 // ============================================================
@@ -1008,6 +1047,8 @@ function renderQuickBar(): void {
 function renderHud(): void {
   $("hud-hp").textContent = `${Math.ceil(player.hp)}`;
   $("hud-hunger").textContent = `${Math.ceil(player.hunger)}`;
+  const warmthEl = $("hud-warmth");
+  if (warmthEl) warmthEl.textContent = `${Math.round(player.warmth ?? 50)}`;
   const goldEl = $("hud-gold");
   if (goldEl) goldEl.textContent = `${player.gold}`;
   $("hud-level").textContent = `${player.level}`;
@@ -1084,6 +1125,22 @@ function update(dt: number): void {
 
   // survival
   survivalTick(player, dt);
+
+  // body temperature (task 06)
+  if (player.warmth === undefined) player.warmth = 50;
+  const ambient = ambientTemperature(time, dayDarkness(), eventSched.activeKind("storm", gameSeconds), eventSched.activeKind("wildfire", gameSeconds));
+  const standTile = world.tileAt(Math.round(player.pos.x), Math.round(player.pos.y));
+  const faceTileHeat = world.tileAt(Math.round(player.pos.x) + faceX, Math.round(player.pos.y) + faceZ);
+  const nearHeat = standTile === T_CAMPFIRE || faceTileHeat === T_CAMPFIRE || player.equip === "torch";
+  const wr = warmthStep(player.warmth, ambient, nearHeat, dt);
+  player.warmth = wr.warmth;
+  if ((wr.cold || wr.hot) && player.warmth <= 0.5) {
+    player.hp = Math.max(1, player.hp - dt * 0.8);
+    if (gameSeconds >= coldMsgAt) {
+      coldMsgAt = gameSeconds + 4;
+      notify(wr.hot ? "🥵 ร้อนจัด! HP ลดลง" : "🥶 หนาวจัด! HP ลดลง", "#ff8a80");
+    }
+  }
   if (player.hp <= 0) {
     player.hp = 1;
     player.pos.x = 36; player.pos.y = 36;
